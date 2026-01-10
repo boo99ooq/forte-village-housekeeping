@@ -3,165 +3,129 @@ import pandas as pd
 import os
 from datetime import datetime
 
-st.set_page_config(page_title="Executive Housekeeping - Forte Village", layout="wide")
+st.set_page_config(page_title="Housekeeping - Forte Village", layout="wide")
 
-# --- FILE DI SISTEMA ---
+# --- FILE SISTEMA ---
 FILE_DATA = 'housekeeping_database.csv'
-FILE_HOTELS = 'hotel_list.csv'
 FILE_CONFIG = 'config_tempi.csv'
+FILE_HOTELS = 'hotel_list.csv'
 
-# --- FUNZIONI CARICAMENTO ---
 def load_data():
     if os.path.exists(FILE_DATA):
-        try:
-            df_temp = pd.read_csv(FILE_DATA)
-            if not df_temp.empty:
-                df_temp['Nome'] = df_temp['Nome'].astype(str).str.strip()
-                df_temp['Zone_Padronanza'] = df_temp['Zone_Padronanza'].astype(str).str.strip()
-            return df_temp
-        except: return pd.DataFrame()
+        df = pd.read_csv(FILE_DATA)
+        for col in ['Nome', 'Zone_Padronanza']:
+            if col in df.columns: df[col] = df[col].astype(str).str.strip()
+        return df
     return pd.DataFrame()
 
 def load_hotels():
-    hotel_default = ["Hotel Castello", "Hotel Castello Garden", "Le Dune", "Villa del Parco", "Bouganville", "Le Palme", "Il Borgo", "Le Ville"]
+    # Aggiunto Castello 4 Piano alla lista base
+    h_def = ["Hotel Castello", "Hotel Castello Garden", "Castello 4 Piano", "Le Dune", "Villa del Parco", "Bouganville", "Le Palme", "Il Borgo", "Le Ville"]
     if os.path.exists(FILE_HOTELS):
         try:
             lista = pd.read_csv(FILE_HOTELS)['Nome_Hotel'].str.strip().tolist()
-            return [h for h in lista if h] if (lista and len(lista) > 0) else hotel_default
-        except: return hotel_default
-    return hotel_default
+            return lista if lista else h_def
+        except: return h_def
+    return h_def
 
 df = load_data()
 lista_hotel = load_hotels()
 
-# --- SIDEBAR (Rimane invariata) ---
+# --- SIDEBAR ---
 with st.sidebar:
-    st.header("⚙️ Gestione Personale")
+    st.header("⚙️ Gestione")
     if not df.empty:
-        csv_back = df.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Scarica Backup", data=csv_back, file_name='housekeeping_backup.csv', mime='text/csv')
+        st.download_button("📥 Backup CSV", data=df.to_csv(index=False).encode('utf-8'), file_name='backup.csv')
     
-    st.divider()
     modo = st.radio("Azione:", ["Inserisci Nuova", "Modifica Esistente"])
-    
-    nome_edit = None
     dati = {}
+    nome_edit = None
     if modo == "Modifica Esistente" and not df.empty:
-        nome_edit = st.selectbox("Seleziona risorsa:", sorted(df['Nome'].tolist()))
+        nome_edit = st.selectbox("Seleziona:", sorted(df['Nome'].tolist()))
         dati = df[df['Nome'] == nome_edit].iloc[0].to_dict()
 
-    with st.form("form_staff", clear_on_submit=(modo == "Inserisci Nuova")):
-        nome_in = nome_edit if modo == "Modifica Esistente" else st.text_input("Nome e Cognome")
-        is_gov = st.checkbox("È una GOVERNANTE?", value=(dati.get('Ruolo') == "Governante"))
-        ruolo = "Governante" if is_gov else "Cameriera"
+    with st.form("staff_form"):
+        n_in = nome_edit if modo == "Modifica Esistente" else st.text_input("Nome")
+        is_gov = st.checkbox("Governante", value=(dati.get('Ruolo') == "Governante"))
+        prof = st.slider("Prof.", 1, 10, int(dati.get('Professionalita', 5)))
         
-        prof = st.slider("Professionalità", 1, 10, int(dati.get('Professionalita', 5)))
-        esp = st.slider("Esperienza", 1, 10, int(dati.get('Esperienza', 5)))
-        guida = st.slider("Capacità Guida", 1, 10, int(dati.get('Capacita_Guida', 10 if is_gov else 5)))
-        
-        st.divider()
-        zone_at = str(dati.get('Zone_Padronanza', "")).split(", ")
-        
+        z_at = str(dati.get('Zone_Padronanza', "")).split(", ")
         if is_gov:
-            st.info("Assegnazione Fissa (Max 2 Hotel)")
-            scelte_gov = st.multiselect("Alberghi:", lista_hotel, default=[h for h in zone_at if h in lista_hotel], max_selections=2)
-            zona_assegnata = ", ".join(scelte_gov)
+            sel_z = st.multiselect("Hotel (Max 2)", lista_hotel, default=[h for h in z_at if h in lista_hotel], max_selections=2)
+            z_ass = ", ".join(sel_z)
         else:
-            st.write("**Zone di Padronanza**")
-            scelte_cam = [h for h in lista_hotel if st.checkbox(h, key=f"side_{h}", value=(h in zone_at))]
-            zona_assegnata = ", ".join(scelte_cam)
+            sel_z = [h for h in lista_hotel if st.checkbox(h, key=f"s_{h}", value=(h in z_at))]
+            z_ass = ", ".join(sel_z)
 
-        relazioni = ["Nessuna"] + sorted([n for n in df['Nome'].tolist() if n != nome_in]) if not df.empty else ["Nessuna"]
-        lavora_con = st.selectbox("Lavora bene con:", relazioni, index=relazioni.index(dati.get('Lavora_Bene_Con', "Nessuna")) if dati.get('Lavora_Bene_Con') in relazioni else 0)
-        
-        if st.form_submit_button("SALVA / AGGIORNA"):
-            if nome_in:
-                new_row = {
-                    "Nome": nome_in.strip(), "Ruolo": ruolo, "Professionalita": prof, 
-                    "Esperienza": esp, "Capacita_Guida": guida, 
-                    "Zone_Padronanza": zona_assegnata, "Lavora_Bene_Con": lavora_con,
-                    "Ultima_Modifica": datetime.now().strftime("%d/%m/%Y %H:%M")
-                }
-                if modo == "Modifica Esistente":
-                    df = df[df['Nome'] != nome_edit]
-                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-                df.to_csv(FILE_DATA, index=False)
-                st.success("Modifica registrata!")
-                st.rerun()
-
-# --- TABS ---
-tab_home, tab_config, tab_planning = st.tabs(["🏆 Dashboard Staff", "⚙️ Tempi per Hotel", "🚀 Planning Giornaliero"])
-
-with tab_home:
-    if not df.empty:
-        ultima_mod = df['Ultima_Modifica'].dropna().max() if 'Ultima_Modifica' in df.columns else "N/D"
-        st.caption(f"🕒 Ultimo aggiornamento database: **{ultima_mod}**")
-        df['Ranking'] = (df['Professionalita']*5) + (df['Esperienza']*5) + (df['Capacita_Guida']*4)
-        st.dataframe(df.sort_values(['Ruolo', 'Ranking'], ascending=[False, False])[['Nome', 'Ruolo', 'Zone_Padronanza', 'Ranking', 'Lavora_Bene_Con']], use_container_width=True)
-
-with tab_config:
-    st.header("Configurazione Minuti")
-    # Logica di sincronizzazione automatica
-    if os.path.exists(FILE_CONFIG):
-        config_df = pd.read_csv(FILE_CONFIG)
-    else:
-        config_df = pd.DataFrame(columns=["Hotel", "Arr_Ind", "Fer_Ind", "Arr_Gru", "Fer_Gru"])
-
-    # Se un hotel della lista non è nel config, lo aggiungiamo subito
-    presenti = config_df['Hotel'].tolist()
-    mancanti = [h for h in lista_hotel if h not in presenti]
-    if mancanti:
-        nuovi_dati = [{"Hotel": h, "Arr_Ind": 60, "Fer_Ind": 30, "Arr_Gru": 45, "Fer_Gru": 20} for h in mancanti]
-        config_df = pd.concat([config_df, pd.DataFrame(nuovi_dati)], ignore_index=True)
-
-    with st.form("config_form"):
-        updated_c = []
-        for i, r in config_df.iterrows():
-            if r['Hotel'] in lista_hotel:
-                st.subheader(f"🏨 {r['Hotel']}")
-                c1, c2 = st.columns(2)
-                with c1:
-                    ai = st.slider(f"Arrivo Ind.", 5, 90, int(r.get('Arr_Ind', 60)), key=f"ai_{i}")
-                    ag = st.slider(f"Arrivo Gru.", 5, 90, int(r.get('Arr_Gru', 45)), key=f"ag_{i}")
-                with c2:
-                    fi = st.slider(f"Fermata Ind.", 5, 90, int(r.get('Fer_Ind', 30)), key=f"fi_{i}")
-                    fg = st.slider(f"Fermata Gru.", 5, 90, int(r.get('Fer_Gru', 20)), key=f"fg_{i}")
-                updated_c.append({"Hotel": r['Hotel'], "Arr_Ind": ai, "Fer_Ind": fi, "Arr_Gru": ag, "Fer_Gru": fg})
-        
-        if st.form_submit_button("SALVA CONFIGURAZIONE"):
-            pd.DataFrame(updated_c).to_csv(FILE_CONFIG, index=False)
-            st.success("Configurazione Tempi salvata per tutti gli hotel!")
+        if st.form_submit_button("SALVA"):
+            new = {"Nome": n_in, "Ruolo": "Governante" if is_gov else "Cameriera", "Professionalita": prof, "Zone_Padronanza": z_ass, "Ultima_Modifica": datetime.now().strftime("%d/%m %H:%M")}
+            if modo == "Modifica Esistente": df = df[df['Nome'] != nome_edit]
+            df = pd.concat([df, pd.DataFrame([new])], ignore_index=True)
+            df.to_csv(FILE_DATA, index=False)
             st.rerun()
 
-with tab_planning:
-    st.header("Planning Giornaliero")
-    target = st.selectbox("Seleziona Hotel:", lista_hotel)
+# --- TABS ---
+t1, t2, t3 = st.tabs(["🏆 Staff", "⚙️ Tempi", "🚀 Planning"])
+
+with t1:
+    if not df.empty:
+        st.dataframe(df.sort_values('Ruolo', ascending=False), use_container_width=True)
+
+with t2:
+    st.header("Configurazione Minuti")
+    if os.path.exists(FILE_CONFIG): conf = pd.read_csv(FILE_CONFIG)
+    else: conf = pd.DataFrame([{"Hotel": h, "Arr_Ind": 60, "Fer_Ind": 30, "Arr_Gru": 45, "Fer_Gru": 20} for h in lista_hotel])
+    
+    # Sincronizza hotel mancanti
+    mancanti = [h for h in lista_hotel if h not in conf['Hotel'].tolist()]
+    if mancanti:
+        new_c = pd.DataFrame([{"Hotel": h, "Arr_Ind": 60, "Fer_Ind": 30, "Arr_Gru": 45, "Fer_Gru": 20} for h in mancanti])
+        conf = pd.concat([conf, new_c], ignore_index=True)
+
+    with st.form("c_form"):
+        up_c = []
+        for i, r in conf.iterrows():
+            if r['Hotel'] in lista_hotel:
+                st.write(f"**{r['Hotel']}**")
+                c1, c2 = st.columns(2)
+                ai = c1.slider(f"Arr. Ind", 5, 90, int(r['Arr_Ind']), key=f"ai{i}")
+                fi = c2.slider(f"Fer. Ind", 5, 90, int(r['Fer_Ind']), key=f"fi{i}")
+                up_c.append({"Hotel": r['Hotel'], "Arr_Ind": ai, "Fer_Ind": fi, "Arr_Gru": r['Arr_Gru'], "Fer_Gru": r['Fer_Gru']})
+        if st.form_submit_button("SALVA TEMPI"):
+            pd.DataFrame(up_c).to_csv(FILE_CONFIG, index=False)
+            st.rerun()
+
+with t3:
+    target = st.selectbox("Hotel:", lista_hotel)
     if os.path.exists(FILE_CONFIG):
         c_f = pd.read_csv(FILE_CONFIG)
-        # Cerchiamo i tempi per l'hotel selezionato
-        h_row = c_f[c_f['Hotel'] == target]
-        if not h_row.empty:
-            h_c = h_row.iloc[0]
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("**Individuali**")
-                n_ai = st.number_input("Arrivi", 0, 100, 0, key="p_ai")
-                n_vi = st.number_input("Vuote", 0, 100, 0, key="p_vi")
-                n_fi = st.number_input("Fermate", 0, 100, 0, key="p_fi")
-            with col2:
-                st.markdown("**Gruppi**")
-                n_ag = st.number_input("Arrivi (G)", 0, 100, 0, key="p_ag")
-                n_vg = st.number_input("Vuote (G)", 0, 100, 0, key="p_vg")
-                n_fg = st.number_input("Fermate (G)", 0, 100, 0, key="p_fg")
+        h_c = c_f[c_f['Hotel'] == target].iloc[0]
+        
+        c1, c2 = st.columns(2)
+        n_ai = c1.number_input("Arrivi/Vuote", 0, 100, 0)
+        n_fi = c2.number_input("Fermate", 0, 100, 0)
+        
+        ore = ((n_ai * h_c['Arr_Ind']) + (n_fi * h_c['Fer_Ind'])) / 60
+        st.metric("Ore Totali", f"{ore:.1f}")
+        
+        if st.button("CALCOLA"):
+            # GOVERNANTE
+            govs = df[(df['Ruolo'] == "Governante") & (df['Zone_Padronanza'].str.contains(target, na=False))]
+            if not govs.empty:
+                for _, g in govs.iterrows(): st.success(f"📌 Responsabile: {g['Nome']}")
+            else:
+                st.warning("⚠️ Nessuna Governante fissa.")
+                jolly = df[df['Ruolo'] == "Governante"]
+                if not jolly.empty:
+                    st.selectbox("Assegna una Jolly per oggi:", jolly['Nome'].tolist())
+
+            # CAMERIERE
+            num_nec = round(ore / 7) if ore > 0 else 1
+            cam = df[(df['Ruolo'] == "Cameriera") & (df['Zone_Padronanza'].str.contains(target, na=False))]
             
-            min_tot = ((n_ai + n_vi) * h_c['Arr_Ind']) + (n_fi * h_c['Fer_Ind']) + ((n_ag + n_vg) * h_c['Arr_Gru']) + (n_fg * h_c['Fer_Gru'])
-            st.metric("Carico stimato (Ore)", f"{min_tot/60:.1f}")
+            if cam.empty:
+                st.info("Nessuna cameriera specifica per zona. Mostro le migliori disponibili:")
+                cam = df[df['Ruolo'] == "Cameriera"].sort_values('Professionalita', ascending=False)
             
-            if st.button("CALCOLA SQUADRA"):
-                govs = df[(df['Ruolo'] == "Governante") & (df['Zone_Padronanza'].str.contains(target, na=False))]
-                for _, g in govs.iterrows(): st.success(f"📌 Responsabile: **{g['Nome']}**")
-                num_c = round((min_tot/60) / 7)
-                cam = df[(df['Ruolo'] == "Cameriera") & (df['Zone_Padronanza'].str.contains(target, na=False))]
-                st.table(cam.head(num_c if num_c > 0 else 3)[['Nome', 'Lavora_Bene_Con']])
-        else:
-            st.warning(f"Configura i tempi per {target} nel Tab precedente prima di pianificare.")
+            st.write(f"Squadra suggerita ({num_nec} persone):")
+            st.table(cam.head(num_nec))
