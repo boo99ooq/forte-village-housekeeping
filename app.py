@@ -51,10 +51,14 @@ with st.sidebar:
         
         st.divider()
         if is_gov:
-            st.info("Assegnazione Fissa Stagionale")
-            zona_assegnata = st.selectbox("Hotel assegnato:", lista_hotel, 
-                                          index=lista_hotel.index(dati.get('Zone_Padronanza')) if dati.get('Zone_Padronanza') in lista_hotel else 0)
-        else:
+    st.info("Assegnazione Fissa Stagionale (Max 2 Hotel)")
+    # Trasformiamo il selectbox in un multiselect limitato a 2 scelte
+    zone_attuali_gov = str(dati.get('Zone_Padronanza', "")).split(", ")
+    scelte_gov = st.multiselect("Seleziona Alberghi di riferimento:", 
+                                lista_hotel, 
+                                default=[h for h in zone_attuali_gov if h in lista_hotel],
+                                max_selections=2)
+    zona_assegnata = ", ".join(scelte_gov)       else:
             st.write("**Zone di Padronanza (Cameriera)**")
             zone_at = str(dati.get('Zone_Padronanza', "")).split(", ")
             scelte_cam = [h for h in lista_hotel if st.checkbox(h, key=f"side_{h}", value=(h in zone_at))]
