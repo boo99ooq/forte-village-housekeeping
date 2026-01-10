@@ -16,9 +16,18 @@ def load_data():
     return pd.DataFrame(columns=["Nome", "Ruolo", "Professionalita", "Esperienza", "Capacita_Guida", "Tenuta_Fisica", "Disponibilita", "Empatia", "Pendolare", "Turno_Spezzato", "Jolly", "Riposo_Preferenziale", "Zone_Padronanza", "Lavora_Bene_Con", "Non_Assegnare_A"])
 
 def load_hotels():
+    # Lista predefinita con Hotel Castello Garden incluso
+    hotel_default = [
+        "Hotel Castello", "Hotel Castello Garden", "Le Dune", 
+        "Villa del Parco", "Bouganville", "Le Palme", "Il Borgo", "Le Ville"
+    ]
     if os.path.exists(FILE_HOTELS):
-        return pd.read_csv(FILE_HOTELS)['Nome_Hotel'].tolist()
-    return ["Hotel Castello", "Le Dune", "Villa del Parco", "Bouganville", "Le Palme", "Il Borgo", "Le Ville"]
+        try:
+            lista = pd.read_csv(FILE_HOTELS)['Nome_Hotel'].str.strip().tolist()
+            return lista if (lista and len(lista) > 0) else hotel_default
+        except:
+            return hotel_default
+    return hotel_default
 
 df = load_data()
 lista_hotel = load_hotels()
@@ -28,7 +37,7 @@ with st.sidebar:
     st.header("⚙️ Gestione Personale")
     if not df.empty:
         csv_back = df.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Backup Database", data=csv_back, file_name='housekeeping_database.csv', mime='text/csv')
+        st.download_button("📥 Backup Database (Eseguire sempre!)", data=csv_back, file_name='housekeeping_database.csv', mime='text/csv')
     
     st.divider()
     modo = st.radio("Azione:", ["Inserisci Nuova", "Modifica Esistente"])
@@ -44,7 +53,7 @@ with st.sidebar:
         is_gov = st.checkbox("È una GOVERNANTE?", value=(dati.get('Ruolo') == "Governante"))
         ruolo = "Governante" if is_gov else "Cameriera"
         
-        st.write("**Valutazione (1-10)**")
+        st.write("**Valutazione**")
         prof = st.slider("Professionalità", 1, 10, int(dati.get('Professionalita', 5)))
         esp = st.slider("Esperienza", 1, 10, int(dati.get('Esperienza', 5)))
         guida = st.slider("Capacità Guida", 1, 10, int(dati.get('Capacita_Guida', 10 if is_gov else 5)))
@@ -80,32 +89,27 @@ with st.sidebar:
             df.to_csv(FILE_DATA, index=False)
             st.rerun()
 
-# --- TABS PRINCIPALI ---
+# --- TABS ---
 tab_home, tab_config, tab_planning = st.tabs(["🏆 Dashboard Staff", "⚙️ Tempi per Hotel", "🚀 Planning Giornaliero"])
 
-# --- TAB 1: DASHBOARD ---
 with tab_home:
     if not df.empty:
         df['Ranking'] = (df['Professionalita']*5) + (df['Esperienza']*5) + (df['Capacita_Guida']*4)
-        st.write("### 🏆 Riepilogo Squadra Piani")
-        
-        df_display = df.sort_values(['Ruolo', 'Ranking'], ascending=[False, False])
-        st.dataframe(
-            df_display[['Nome', 'Ruolo', 'Zone_Padronanza', 'Ranking', 'Lavora_Bene_Con']], 
-            use_container_width=True,
-            column_config={
-                "Zone_Padronanza": "Hotel Assegnato / Padronanza",
-                "Ranking": st.column_config.NumberColumn("Score", format="%d")
-            }
-        )
+        st.dataframe(df.sort_values(['Ruolo', 'Ranking'], ascending=[False, False])[['Nome', 'Ruolo', 'Zone_Padronanza', 'Ranking', 'Lavora_Bene_Con']], use_container_width=True)
     else:
-        st.info("Database vuoto. Inserisci personale dalla barra laterale.")
+        st.info("Usa la barra laterale per inserire staff.")
 
-# --- TAB 2: CONFIGURAZIONE TEMPI ---
 with tab_config:
-    st.header("Configurazione Minuti per Camera")
+    st.header("Configurazione Minuti")
+    # Caricamento o creazione config
     if os.path.exists(FILE_CONFIG):
         config_df = pd.read_csv(FILE_CONFIG)
+        # Aggiungiamo hotel mancanti (come il Castello Garden appena inserito)
+        presenti = config_df['Hotel'].tolist()
+        per_aggiungere = [h for h in lista_hotel if h not in presenti]
+        if per_aggiungere:
+            new_rows = pd.DataFrame([{"Hotel": h, "Arr_Ind": 60, "Fer_Ind": 30, "Vuo_Ind": 45, "Arr_Gru": 45, "Fer_Gru": 20, "Vuo_Gru": 30} for h in per_aggiungere])
+            config_df = pd.concat([config_df, new_rows], ignore_index=True)
     else:
         config_df = pd.DataFrame([{"Hotel": h, "Arr_Ind": 60, "Fer_Ind": 30, "Vuo_Ind": 45, "Arr_Gru": 45, "Fer_Gru": 20, "Vuo_Gru": 30} for h in lista_hotel])
 
@@ -126,40 +130,35 @@ with tab_config:
             updated_c.append({"Hotel": r['Hotel'], "Arr_Ind": ai, "Fer_Ind": fi, "Vuo_Ind": vi, "Arr_Gru": ag, "Fer_Gru": fg, "Vuo_Gru": vg})
         if st.form_submit_button("SALVA CONFIGURAZIONE"):
             pd.DataFrame(updated_c).to_csv(FILE_CONFIG, index=False)
-            st.success("Tempi salvati!")
+            st.success("Configurazione Tempi salvata!")
 
-# --- TAB 3: PLANNING ---
 with tab_planning:
-    st.header("Calcolo Carico Lavoro")
+    st.header("Pianificazione Giornaliera")
     target = st.selectbox("Seleziona Hotel:", lista_hotel)
-    
     if os.path.exists(FILE_CONFIG):
         c_f = pd.read_csv(FILE_CONFIG)
-        h_c = c_f[c_f['Hotel'] == target].iloc[0]
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("**Individuali**")
-            n_ai = st.number_input("Arrivi Ind.", 0, 100, 0, key="plan_ai")
-            n_fi = st.number_input("Fermate Ind.", 0, 100, 0, key="plan_fi")
-            n_vi = st.number_input("Vuote Ind.", 0, 100, 0, key="plan_vi")
-        with col2:
-            st.markdown("**Gruppi**")
-            n_ag = st.number_input("Arrivi Gru.", 0, 100, 0, key="plan_ag")
-            n_fg = st.number_input("Fermate Gru.", 0, 100, 0, key="plan_fg")
-            n_vg = st.number_input("Vuote Gru.", 0, 100, 0, key="plan_vg")
+        if target in c_f['Hotel'].values:
+            h_c = c_f[c_f['Hotel'] == target].iloc[0]
+            col1, col2 = st.columns(2)
+            with col1:
+                n_ai = st.number_input("Arrivi Ind.", 0, 100, 0, key="p_ai")
+                n_fi = st.number_input("Fermate Ind.", 0, 100, 0, key="p_fi")
+                n_vi = st.number_input("Vuote Ind.", 0, 100, 0, key="p_vi")
+            with col2:
+                n_ag = st.number_input("Arrivi Gru.", 0, 100, 0, key="p_ag")
+                n_fg = st.number_input("Fermate Gru.", 0, 100, 0, key="p_fg")
+                n_vg = st.number_input("Vuote Gru.", 0, 100, 0, key="p_vg")
             
-        min_tot = (n_ai*h_c['Arr_Ind']) + (n_fi*h_c['Fer_Ind']) + (n_vi*h_c['Vuo_Ind']) + (n_ag*h_c['Arr_Gru']) + (n_fg*h_c['Fer_Gru']) + (n_vg*h_c['Vuo_Gru'])
-        ore_tot = min_tot / 60
-        st.metric("Ore stimata", f"{ore_tot:.1f}")
-        
-        if st.button("CALCOLA SQUADRA"):
-            # Cerca governante (può essere assegnata a max 2 hotel)
-            govs = df[(df['Ruolo'] == "Governante") & (df['Zone_Padronanza'].str.contains(target, na=False))]
-            for _, g in govs.iterrows():
-                st.success(f"📌 Responsabile: **{g['Nome']}**")
+            ore_tot = ((n_ai*h_c['Arr_Ind']) + (n_fi*h_c['Fer_Ind']) + (n_vi*h_c['Vuo_Ind']) + (n_ag*h_c['Arr_Gru']) + (n_fg*h_c['Fer_Gru']) + (n_vg*h_c['Vuo_Gru'])) / 60
+            st.metric("Carico stimato (Ore)", f"{ore_tot:.1f}")
             
-            num_cameriere = round(ore_tot / 7)
-            cameriere = df[(df['Ruolo'] == "Cameriera") & (df['Zone_Padronanza'].str.contains(target, na=False))]
-            st.write(f"Cameriere suggerite ({num_cameriere}):")
-            st.table(cameriere.head(num_cameriere if num_cameriere > 0 else 3)[['Nome', 'Lavora_Bene_Con']])
+            if st.button("CALCOLA SQUADRA"):
+                # Mostra governante fissa
+                govs = df[(df['Ruolo'] == "Governante") & (df['Zone_Padronanza'].str.contains(target, na=False))]
+                for _, g in govs.iterrows():
+                    st.success(f"📌 Responsabile: **{g['Nome']}**")
+                
+                # Suggerimento cameriere
+                num_c = round(ore_tot / 7)
+                cam = df[(df['Ruolo'] == "Cameriera") & (df['Zone_Padronanza'].str.contains(target, na=False))]
+                st.table(cam.head(num_c if num_c > 0 else 3)[['Nome', 'Lavora_Bene_Con']])
