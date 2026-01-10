@@ -1,1 +1,6 @@
-Nome,Professionalita,Esperienza,Capacita_Guida,Tenuta_Fisica,Disponibilita,Empatia,Pendolare,Turno_Spezzato,Jolly,Riposo_Preferenziale,Zone_Padronanza,Lavora_Bene_Con,Non_Assegnare_A
+Nome,Ruolo,Professionalita,Esperienza,Capacita_Guida,Tenuta_Fisica,Disponibilita,Empatia,Pendolare,Turno_Spezzato,Jolly,Riposo_Preferenziale,Zone_Padronanza,Lavora_Bene_Con,Non_Assegnare_A
+Amaryllis,Governante,10,9,10,8,7,8,0,1,1,Nessuna,"Hotel Castello, Le Dune",Nessuna,Nessuna
+Belphoebe,Governante,9,10,10,7,8,9,0,0,0,Lunedì,"Hotel Pineta, Villa del Parco",Nessuna,Nessuna
+Clarimunda,Cameriera,8,7,6,9,10,7,1,1,1,Nessuna,Hotel Castello,Amaryllis,Nessuna
+Doralice,Cameriera,7,6,5,10,9,8,1,0,0,Martedì,Le Dune,Nessuna,Clarimunda
+Euphemia,Cameriera,9,8,7,8,6,10,0,1,0,Nessuna,Villa del Parco,Belphoebe,Nessuna
