@@ -82,8 +82,27 @@ tab_home, tab_config, tab_planning = st.tabs(["🏆 Dashboard Staff", "⚙️ Te
 # --- TAB 1: DASHBOARD ---
 with tab_home:
     if not df.empty:
+        # Calcolo Ranking aggiornato
         df['Ranking'] = (df['Professionalita']*5) + (df['Esperienza']*5) + (df['Capacita_Guida']*4)
-        st.dataframe(df.sort_values(['Ruolo', 'Ranking'], ascending=[False, False]), use_container_width=True)
+        
+        st.write("### 🏆 Riepilogo Squadra Piani")
+        
+        # Riordiniamo le colonne per dare priorità a Nome, Ruolo e Zona
+        colonne_ordine = ['Nome', 'Ruolo', 'Zone_Padronanza', 'Ranking', 'Lavora_Bene_Con']
+        
+        # Mostriamo il database filtrato e ordinato
+        df_display = df.sort_values(['Ruolo', 'Ranking'], ascending=[False, False])
+        
+        st.dataframe(
+            df_display[colonne_ordine], 
+            use_container_width=True,
+            column_config={
+                "Zone_Padronanza": st.column_config.TextColumn("Hotel Assegnato / Zone Padronanza"),
+                "Ranking": st.column_config.NumberColumn("Punteggio", format="%d")
+            }
+        )
+        
+        st.info("💡 Le Governanti appaiono in alto con il loro Hotel di assegnazione fissa.")
     else:
         st.info("Database vuoto. Inserisci personale dalla barra laterale.")
 
