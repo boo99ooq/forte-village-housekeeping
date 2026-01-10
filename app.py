@@ -13,7 +13,7 @@ FILE_CONFIG = 'config_tempi.csv'
 def load_data():
     if os.path.exists(FILE_DATA):
         return pd.read_csv(FILE_DATA)
-    return pd.DataFrame()
+    return pd.DataFrame(columns=["Nome", "Ruolo", "Professionalita", "Esperienza", "Capacita_Guida", "Tenuta_Fisica", "Disponibilita", "Empatia", "Pendolare", "Turno_Spezzato", "Jolly", "Riposo_Preferenziale", "Zone_Padronanza", "Lavora_Bene_Con", "Non_Assegnare_A"])
 
 def load_hotels():
     if os.path.exists(FILE_HOTELS):
@@ -51,14 +51,14 @@ with st.sidebar:
         
         st.divider()
         if is_gov:
-    st.info("Assegnazione Fissa Stagionale (Max 2 Hotel)")
-    # Trasformiamo il selectbox in un multiselect limitato a 2 scelte
-    zone_attuali_gov = str(dati.get('Zone_Padronanza', "")).split(", ")
-    scelte_gov = st.multiselect("Seleziona Alberghi di riferimento:", 
-                                lista_hotel, 
-                                default=[h for h in zone_attuali_gov if h in lista_hotel],
-                                max_selections=2)
-    zona_assegnata = ", ".join(scelte_gov)       else:
+            st.info("Assegnazione Fissa (Max 2 Hotel)")
+            zone_attuali = str(dati.get('Zone_Padronanza', "")).split(", ")
+            scelte_gov = st.multiselect("Alberghi di riferimento:", 
+                                        lista_hotel, 
+                                        default=[h for h in zone_attuali if h in lista_hotel],
+                                        max_selections=2)
+            zona_assegnata = ", ".join(scelte_gov)
+        else:
             st.write("**Zone di Padronanza (Cameriera)**")
             zone_at = str(dati.get('Zone_Padronanza', "")).split(", ")
             scelte_cam = [h for h in lista_hotel if st.checkbox(h, key=f"side_{h}", value=(h in zone_at))]
@@ -86,27 +86,18 @@ tab_home, tab_config, tab_planning = st.tabs(["🏆 Dashboard Staff", "⚙️ Te
 # --- TAB 1: DASHBOARD ---
 with tab_home:
     if not df.empty:
-        # Calcolo Ranking aggiornato
         df['Ranking'] = (df['Professionalita']*5) + (df['Esperienza']*5) + (df['Capacita_Guida']*4)
-        
         st.write("### 🏆 Riepilogo Squadra Piani")
         
-        # Riordiniamo le colonne per dare priorità a Nome, Ruolo e Zona
-        colonne_ordine = ['Nome', 'Ruolo', 'Zone_Padronanza', 'Ranking', 'Lavora_Bene_Con']
-        
-        # Mostriamo il database filtrato e ordinato
         df_display = df.sort_values(['Ruolo', 'Ranking'], ascending=[False, False])
-        
         st.dataframe(
-            df_display[colonne_ordine], 
+            df_display[['Nome', 'Ruolo', 'Zone_Padronanza', 'Ranking', 'Lavora_Bene_Con']], 
             use_container_width=True,
             column_config={
-                "Zone_Padronanza": st.column_config.TextColumn("Hotel Assegnato / Zone Padronanza"),
-                "Ranking": st.column_config.NumberColumn("Punteggio", format="%d")
+                "Zone_Padronanza": "Hotel Assegnato / Padronanza",
+                "Ranking": st.column_config.NumberColumn("Score", format="%d")
             }
         )
-        
-        st.info("💡 Le Governanti appaiono in alto con il loro Hotel di assegnazione fissa.")
     else:
         st.info("Database vuoto. Inserisci personale dalla barra laterale.")
 
@@ -135,41 +126,40 @@ with tab_config:
             updated_c.append({"Hotel": r['Hotel'], "Arr_Ind": ai, "Fer_Ind": fi, "Vuo_Ind": vi, "Arr_Gru": ag, "Fer_Gru": fg, "Vuo_Gru": vg})
         if st.form_submit_button("SALVA CONFIGURAZIONE"):
             pd.DataFrame(updated_c).to_csv(FILE_CONFIG, index=False)
-            st.success("Tempi salvati con successo!")
+            st.success("Tempi salvati!")
 
 # --- TAB 3: PLANNING ---
 with tab_planning:
-    st.header("Calcolo Carico Lavoro e Squadra")
+    st.header("Calcolo Carico Lavoro")
     target = st.selectbox("Seleziona Hotel:", lista_hotel)
     
     if os.path.exists(FILE_CONFIG):
         c_f = pd.read_csv(FILE_CONFIG)
         h_c = c_f[c_f['Hotel'] == target].iloc[0]
         
-        st.write(f"### Inserimento Camere del Giorno")
         col1, col2 = st.columns(2)
         with col1:
             st.markdown("**Individuali**")
-            n_ai = st.number_input("Arrivi Ind.", 0, 100, 0)
-            n_fi = st.number_input("Fermate Ind.", 0, 100, 0)
-            n_vi = st.number_input("Vuote Ind.", 0, 100, 0)
+            n_ai = st.number_input("Arrivi Ind.", 0, 100, 0, key="plan_ai")
+            n_fi = st.number_input("Fermate Ind.", 0, 100, 0, key="plan_fi")
+            n_vi = st.number_input("Vuote Ind.", 0, 100, 0, key="plan_vi")
         with col2:
             st.markdown("**Gruppi**")
-            n_ag = st.number_input("Arrivi Gru.", 0, 100, 0)
-            n_fg = st.number_input("Fermate Gru.", 0, 100, 0)
-            n_vg = st.number_input("Vuote Gru.", 0, 100, 0)
+            n_ag = st.number_input("Arrivi Gru.", 0, 100, 0, key="plan_ag")
+            n_fg = st.number_input("Fermate Gru.", 0, 100, 0, key="plan_fg")
+            n_vg = st.number_input("Vuote Gru.", 0, 100, 0, key="plan_vg")
             
-        min_tot = (n_ai*h_c['Arr_Ind']) + (n_fi*h_c['Fer_Ind']) + (n_vi*h_c['Vuo_Ind']) + \
-                  (n_ag*h_c['Arr_Gru']) + (n_fg*h_c['Fer_Gru']) + (n_vg*h_c['Vuo_Gru'])
+        min_tot = (n_ai*h_c['Arr_Ind']) + (n_fi*h_c['Fer_Ind']) + (n_vi*h_c['Vuo_Ind']) + (n_ag*h_c['Arr_Gru']) + (n_fg*h_c['Fer_Gru']) + (n_vg*h_c['Vuo_Gru'])
         ore_tot = min_tot / 60
-        st.metric("Ore necessarie stimate", f"{ore_tot:.1f}")
+        st.metric("Ore stimata", f"{ore_tot:.1f}")
         
-        if st.button("CALCOLA SQUADRA SUGGERITA"):
-            gov = df[(df['Ruolo'] == "Governante") & (df['Zone_Padronanza'] == target)]
-            if not gov.empty:
-                st.success(f"📌 Governante Stagionale: **{gov.iloc[0]['Nome']}**")
+        if st.button("CALCOLA SQUADRA"):
+            # Cerca governante (può essere assegnata a max 2 hotel)
+            govs = df[(df['Ruolo'] == "Governante") & (df['Zone_Padronanza'].str.contains(target, na=False))]
+            for _, g in govs.iterrows():
+                st.success(f"📌 Responsabile: **{g['Nome']}**")
             
-            staff = df[df['Zone_Padronanza'].str.contains(target, na=False) & (df['Ruolo'] == "Cameriera")]
-            num_nec = round(ore_tot / 7)
-            st.write(f"Cameriere suggerite ({num_nec}):")
-            st.table(staff.head(num_nec if num_nec > 0 else 3)[['Nome', 'Lavora_Bene_Con']])
+            num_cameriere = round(ore_tot / 7)
+            cameriere = df[(df['Ruolo'] == "Cameriera") & (df['Zone_Padronanza'].str.contains(target, na=False))]
+            st.write(f"Cameriere suggerite ({num_cameriere}):")
+            st.table(cameriere.head(num_cameriere if num_cameriere > 0 else 3)[['Nome', 'Lavora_Bene_Con']])
