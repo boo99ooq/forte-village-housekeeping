@@ -38,9 +38,8 @@ with st.sidebar:
     st.divider()
     
     with st.form("form_housekeeping", clear_on_submit=(modo == "Inserisci Nuova")):
-        # Se siamo in modifica, il nome è bloccato o precompilato
         if modo == "Modifica Esistente":
-            st.info(f"Stai aggiornando la scheda di: **{nome_da_modificare}**")
+            st.info(f"Aggiornamento: **{nome_da_modificare}**")
             nome = nome_da_modificare
         else:
             nome = st.text_input("Nome e Cognome")
@@ -54,15 +53,24 @@ with st.sidebar:
         emp = st.slider("Empatia", 1, 10, int(dati_precompilati.get('Empatia', 5)))
         
         st.divider()
+        st.write("**Relazioni e Preferenze**")
         lista_nomi = ["Nessuna"] + [n for n in df['Nome'].tolist() if n != nome] if not df.empty else ["Nessuna"]
-        lavora_con = st.selectbox("Lavora bene con:", lista_nomi, index=0 if modo == "Inserisci Nuova" else lista_nomi.index(dati_precompilati.get('Lavora_Bene_Con', "Nessuna")) if dati_precompilati.get('Lavora_Bene_Con') in lista_nomi else 0)
         
+        lavora_con = st.selectbox("Lavora bene con (Affinità):", lista_nomi, 
+                                 index=lista_nomi.index(dati_precompilati.get('Lavora_Bene_Con', "Nessuna")) if dati_precompilati.get('Lavora_Bene_Con') in lista_nomi else 0)
+        
+        non_lavora_con = st.selectbox("NON assegnare a (Incompatibilità):", lista_nomi, 
+                                     index=lista_nomi.index(dati_precompilati.get('Non_Assegnare_A', "Nessuna")) if dati_precompilati.get('Non_Assegnare_A') in lista_nomi else 0)
+        
+        st.divider()
+        st.write("**Logistica e Vincoli**")
         pendolare = st.checkbox("Pendolare", value=bool(dati_precompilati.get('Pendolare', False)))
         spezzato = st.checkbox("Disponibile Spezzato", value=bool(dati_precompilati.get('Turno_Spezzato', False)))
         jolly = st.checkbox("Jolly", value=bool(dati_precompilati.get('Jolly', False)))
         
-        riposo = st.selectbox("Riposo", ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"], 
-                              index=["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"].index(dati_precompilati.get('Riposo_Preferenziale', "Lunedì")))
+        opzioni_riposo = ["Nessuna", "Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+        pref_riposo = st.selectbox("Preferenze Riposo:", opzioni_riposo, 
+                                   index=opzioni_riposo.index(dati_precompilati.get('Riposo_Preferenziale', "Nessuna")))
 
         st.write("**Zone di Padronanza**")
         zone_attuali = str(dati_precompilati.get('Zone_Padronanza', "")).split(", ")
@@ -82,9 +90,10 @@ if submit and nome:
         "Pendolare": 1 if pendolare else 0,
         "Turno_Spezzato": 1 if spezzato else 0,
         "Jolly": 1 if jolly else 0,
-        "Riposo_Preferenziale": riposo,
+        "Riposo_Preferenziale": pref_riposo,
         "Zone_Padronanza": ", ".join(zone_scelte),
-        "Lavora_Bene_Con": lavora_con
+        "Lavora_Bene_Con": lavora_con,
+        "Non_Assegnare_A": non_lavora_con
     }
     
     if modo == "Modifica Esistente":
@@ -92,7 +101,7 @@ if submit and nome:
         st.success(f"Scheda di {nome} aggiornata!")
     else:
         if not df.empty and nome.strip().lower() in df['Nome'].str.lower().values:
-            st.error("Errore: Nome già presente. Usa 'Modifica' per cambiare i voti.")
+            st.error("Errore: Nome già presente.")
         else:
             df = pd.concat([df, pd.DataFrame([nuovi_dati])], ignore_index=True)
             st.success(f"Scheda di {nome} creata!")
@@ -110,9 +119,9 @@ if not df.empty:
 
     tab1, tab2 = st.tabs(["🏆 Classifica Generale", "🔍 Ricerca per Hotel"])
     with tab1:
-        st.dataframe(df_display[['Nome', 'Ranking', 'Professionalita', 'Esperienza', 'Lavora_Bene_Con', 'Zone_Padronanza']], use_container_width=True)
+        st.dataframe(df_display[['Nome', 'Ranking', 'Lavora_Bene_Con', 'Non_Assegnare_A', 'Riposo_Preferenziale', 'Zone_Padronanza']], use_container_width=True)
     with tab2:
         hotel_sel = st.selectbox("Hotel:", lista_hotel)
-        st.table(df_display[df_display['Zone_Padronanza'].str.contains(hotel_sel, na=False)][['Nome', 'Ranking', 'Lavora_Bene_Con']])
+        st.table(df_display[df_display['Zone_Padronanza'].str.contains(hotel_sel, na=False)][['Nome', 'Ranking', 'Lavora_Bene_Con', 'Non_Assegnare_A']])
 else:
     st.info("Database vuoto.")
