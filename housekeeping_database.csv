@@ -4,3 +4,18 @@ Belphoebe,Governante,9,10,10,7,8,9,0,0,0,Lunedì,"Hotel Pineta, Villa del Parco"
 Clarimunda,Cameriera,8,7,6,9,10,7,1,1,1,Nessuna,Hotel Castello,Amaryllis,Nessuna
 Doralice,Cameriera,7,6,5,10,9,8,1,0,0,Martedì,Le Dune,Nessuna,Clarimunda
 Euphemia,Cameriera,9,8,7,8,6,10,0,1,0,Nessuna,Villa del Parco,Belphoebe,Nessuna
+Febe,Governante,10,10,10,6,9,9,0,0,1,Nessuna,"Le Dune, Hotel Castello",Nessuna,Nessuna
+Gliceria,Cameriera,6,5,4,10,10,6,1,1,0,Mercoledì,Hotel Bouganville,Nessuna,Nessuna
+Hesperia,Cameriera,8,9,7,7,8,8,0,1,1,Giovedì,"Hotel Pineta, Il Borgo",Febe,Nessuna
+Isidra,Cameriera,7,8,5,8,7,9,0,0,0,Nessuna,Hotel Le Palme,Nessuna,Doralice
+Jolanda,Cameriera,9,9,8,7,6,7,1,1,0,Venerdì,Le Ville,Nessuna,Nessuna
+Kalliope,Governante,9,8,10,9,9,10,0,1,0,Nessuna,"Hotel Le Palme, Forte Bay",Nessuna,Nessuna
+Ligeia,Cameriera,8,7,5,9,8,8,0,0,1,Sabato,Il Borgo,Kalliope,Nessuna
+Merope,Cameriera,7,7,6,8,10,7,1,1,0,Domenica,Forte Bay,Nessuna,Gliceria
+Zelmira,Cameriera,9,9,7,9,8,9,0,1,1,Nessuna,"Hotel Castello, Villa del Parco",Amaryllis,Nessuna
+Orizia,Cameriera,6,6,4,10,7,6,1,0,0,Lunedì,Hotel Bouganville,Nessuna,Nessuna
+Pandora,Governante,10,10,10,8,6,7,0,0,0,Nessuna,Le Ville,Nessuna,Orizia
+Quintilia,Cameriera,8,6,5,9,9,8,0,1,0,Martedì,Hotel Pineta,Pandora,Nessuna
+Rhodope,Cameriera,7,8,6,7,7,9,1,1,1,Nessuna,Le Dune,Nessuna,Nessuna
+Sibilla,Cameriera,9,7,7,8,8,10,0,0,0,Mercoledì,Villa del Parco,Belphoebe,Nessuna
+Teofania,Cameriera,8,9,6,7,10,8,0,1,0,Nessuna,Hotel Castello,Nessuna,Nessuna
