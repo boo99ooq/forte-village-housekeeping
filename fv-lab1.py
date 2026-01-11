@@ -240,3 +240,37 @@ with t_tempi:
             "COP": r[5].number_input("COP", 0, 100, 0, key=f"p_co_{h}", label_visibility="collapsed"),
             "BIAN": r[6].number_input("BIAN", 0, 100, 0, key=f"p_bi_{h}", label_visibility="collapsed")
         } 
+        # --- SALVATAGGIO DATI ZONA ---
+            if t_h:
+                n_gov = len([n for n in t_h if "⭐" in n])
+                n_spl = len([n for n in t_h if "🌙" in n])
+                n_pt = len([n for n in t_h if "🕒" in n])
+                n_std = len(t_h) - n_gov - n_spl - n_pt
+                info_txt = f"G:{n_gov} Std:{n_std} 🕒:{n_pt} 🌙:{n_spl}"
+                
+                ris.append({
+                    "Hotel": zona, 
+                    "Team": ", ".join(t_h), 
+                    "Req": round(o_n, 1), 
+                    "Info": info_txt
+                })
+        
+        # Questa riga deve essere allineata al tasto "GENERA"
+        st.session_state['res_v_fin'] = ris
+        st.rerun()
+
+    # --- VISUALIZZAZIONE RISULTATI ---
+    if 'res_v_fin' in st.session_state:
+        st.divider()
+        final_l = []
+        for i, r in enumerate(st.session_state['res_v_fin']):
+            # Mostra i box con i conteggi corretti (G, Std, PT, Spl)
+            with st.expander(f"📍 {r['Hotel']} | {r.get('Info','')} | {r['Req']}h"):
+                # Pulizia icone per il multiselect
+                def_p = [n.replace("⭐ ", "").replace(" (Gov.)", "").replace("🌙 ", "").replace("🕒 ", "").strip() for n in r['Team'].split(",")]
+                s = st.multiselect(f"Modifica {r['Hotel']}", nomi_db, default=def_p, key=f"e_{i}")
+                final_l.append({"Hotel": r['Hotel'], "Team": ", ".join(s)})
+        
+        if st.button("🧊 SCARICA PDF"):
+            pdf = genera_pdf_planning(data_p_str, final_l, st.session_state.get('spl_v_fin', []), assenti)
+            st.download_button("📥 DOWNLOAD", pdf, f"Planning_{data_p}.pdf")
