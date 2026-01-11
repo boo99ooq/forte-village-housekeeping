@@ -1,93 +1,69 @@
 import streamlit as st
 import pandas as pd
 import os
-from datetime import datetime
 
-st.set_page_config(page_title="Executive Housekeeping - Master", layout="wide")
+st.set_page_config(page_title="Housekeeping Resort - Live Sheets", layout="wide")
 
-# --- FILE DI SISTEMA ---
-FILE_DATA = 'housekeeping_database.csv'
+# --- CONFIGURAZIONE GOOGLE SHEETS ---
+# Incolla qui l'URL del tuo foglio Google (quello che ottieni cliccando 'Condividi')
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1KRQ_jfd60uy80l7p44brg08MVfA93LScV2P3X9Mx8bY/edit?usp=sharing"
 FILE_CONFIG = 'config_tempi.csv'
 FILE_LAST_PLAN = 'ultimo_planning_caricato.csv'
-FILE_HOTELS = 'hotel_list.csv'
 
-# --- CARICAMENTO DATI ---
-def load_data():
-    cols = ["Nome", "Ruolo", "Professionalita", "Zone_Padronanza"]
-    if os.path.exists(FILE_DATA):
-        try:
-            df_temp = pd.read_csv(FILE_DATA)
-            if df_temp.empty or 'Nome' not in df_temp.columns:
-                return pd.DataFrame(columns=cols)
-            for col in df_temp.columns:
-                df_temp[col] = df_temp[col].fillna("").astype(str).str.strip()
-            return df_temp
-        except: return pd.DataFrame(columns=cols)
-    return pd.DataFrame(columns=cols)
+# Funzione per convertire l'URL di condivisione in URL di esportazione CSV
+def get_csv_url(url):
+    try:
+        sheet_id = url.split("/d/")[1].split("/")[0]
+        return f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
+    except:
+        return None
+
+@st.cache_data(ttl=10) # Aggiorna i dati ogni 10 secondi se ricarichi
+def load_data_from_gsheets():
+    csv_url = get_csv_url(SHEET_URL)
+    if not csv_url:
+        st.error("URL di Google Sheets non valido.")
+        return pd.DataFrame()
+    try:
+        df_temp = pd.read_csv(csv_url)
+        # Pulizia dati
+        for col in df_temp.columns:
+            df_temp[col] = df_temp[col].fillna("").astype(str).str.strip()
+        return df_temp
+    except Exception as e:
+        st.error(f"Impossibile leggere Google Sheets: {e}")
+        return pd.DataFrame()
 
 def load_hotels():
-    # Lista completa di default (Inclusi Pineta e Spazi Comuni)
-    h_def = [
+    return [
         "Hotel Castello", "Hotel Castello Garden", "Castello 4 Piano", 
         "Cala del Forte", "Le Dune", "Villa del Parco", "Hotel Pineta",
         "Bouganville", "Le Palme", "Il Borgo", "Le Ville", "Spazi Comuni"
     ]
-    if os.path.exists(FILE_HOTELS):
-        try:
-            # Se hai il file CSV, prova a leggere la colonna 'Nome_Hotel' o la prima colonna
-            df_h = pd.read_csv(FILE_HOTELS)
-            col_name = df_h.columns[0]
-            lista = df_h[col_name].str.strip().tolist()
-            return [h for h in lista if h] if lista else h_def
-        except: return h_def
-    return h_def
 
-df = load_data()
+# Caricamento Staff Live
+df = load_data_from_gsheets()
 lista_hotel = load_hotels()
 
-# --- SIDEBAR (Gestione Staff) ---
-with st.sidebar:
-    st.header("⚙️ Gestione Staff")
-    if not df.empty:
-        st.download_button("📥 Backup Staff", data=df.to_csv(index=False).encode('utf-8'), file_name='backup_staff.csv')
-    
-    modo = st.radio("Azione:", ["Inserisci Nuova", "Modifica Esistente"])
-    dati = {}
-    nome_edit = None
-    
-    if modo == "Modifica Esistente" and not df.empty:
-        nome_edit = st.selectbox("Seleziona risorsa:", sorted(df['Nome'].tolist()))
-        dati = df[df['Nome'] == nome_edit].iloc[0].to_dict()
+# --- INTERFACCIA ---
+st.title("🚀 Sistema Housekeeping Live")
+st.info("I dati dello staff vengono letti in tempo reale dal tuo Foglio Google.")
 
-    with st.form("staff_form"):
-        n_in = nome_edit if modo == "Modifica Esistente" else st.text_input("Nome e Cognome")
-        is_gov = st.checkbox("Governante", value=(str(dati.get('Ruolo','')).lower() == "governante"))
-        prof = st.slider("Professionalità", 1, 10, int(dati.get('Professionalita', 5)))
-        z_at = str(dati.get('Zone_Padronanza', "")).split(", ")
-        
-        if is_gov:
-            sel_z = st.multiselect("Destinazione:", lista_hotel, default=[h for h in z_at if h in lista_hotel])
-            z_ass = ", ".join(sel_z)
-        else:
-            st.write("**Zone Padronanza**")
-            sel_z = [h for h in lista_hotel if st.checkbox(h, key=f"s_{h}", value=(h in z_at))]
-            z_ass = ", ".join(sel_z)
-
-        if st.form_submit_button("SALVA SCHEDA"):
-            if n_in:
-                new = {"Nome": n_in.strip(), "Ruolo": "Governante" if is_gov else "Cameriera", "Professionalita": prof, "Zone_Padronanza": z_ass}
-                if modo == "Modifica Esistente": df = df[df['Nome'] != nome_edit]
-                df = pd.concat([df, pd.DataFrame([new])], ignore_index=True)
-                df.to_csv(FILE_DATA, index=False)
-                st.rerun()
-
-# --- TABS ---
 t1, t2, t3 = st.tabs(["🏆 Dashboard Staff", "⚙️ Configurazione Tempi", "🚀 Planning Resort"])
 
+# --- TAB 1: STAFF ---
 with t1:
     if not df.empty:
-        st.dataframe(df[['Nome', 'Ruolo', 'Zone_Padronanza', 'Professionalita']], use_container_width=True)
+        c1, c2 = st.columns(2)
+        n_gov = len(df[df['Ruolo'].str.lower() == "governante"])
+        n_cam = len(df[df['Ruolo'].str.lower() == "cameriera"])
+        c1.metric("Governanti", n_gov)
+        c2.metric("Cameriere", n_cam)
+        st.dataframe(df, use_container_width=True)
+    else:
+        st.warning("Incolla l'URL del foglio Google nel codice per vedere lo staff.")
 
+# --- TAB 2: CONFIGURAZIONE TEMPI ---
 with t2:
     st.header("⚙️ Griglia Tempi Standard")
     if os.path.exists(FILE_CONFIG):
@@ -112,16 +88,20 @@ with t2:
 
     if st.button("💾 CONGELA TEMPI"):
         pd.DataFrame(new_config).to_csv(FILE_CONFIG, index=False)
-        st.success("Configurazione salvata con successo!")
+        st.success("Tempi salvati!")
 
+# --- TAB 3: PLANNING ---
 with t3:
-    st.header("🚀 Piano Operativo Resort")
+    st.header("🚀 Planning Resort")
     if os.path.exists(FILE_LAST_PLAN):
         lp_df = pd.read_csv(FILE_LAST_PLAN)
     else:
         lp_df = pd.DataFrame(columns=["Hotel", "AI", "FI", "VI", "AG", "FG", "VG"])
 
-    personale_assente = st.multiselect("🏖️ Assenze oggi:", sorted(df['Nome'].tolist()))
+    # Gestione Assenze
+    nomi_staff = sorted(df['Nome'].tolist()) if not df.empty else []
+    personale_assente = st.multiselect("🏖️ Seleziona chi è assente oggi:", nomi_staff)
+    
     st.divider()
     
     current_input = []
@@ -136,8 +116,7 @@ with t3:
         vals_in = [c[i+1].number_input("", 0, 100, vs[i], key=f"p_{k}_{h}", label_visibility="collapsed") for i, k in enumerate(["ai","fi","vi","ag","fg","vg"])]
         current_input.append({"Hotel": h, "AI": vals_in[0], "FI": vals_in[1], "VI": vals_in[2], "AG": vals_in[3], "FG": vals_in[4], "VG": vals_in[5]})
 
-    c1, c2 = st.columns(2)
-    if c1.button("🚀 GENERA E CONGELA"):
+    if st.button("🚀 GENERA E CONGELA"):
         pd.DataFrame(current_input).to_csv(FILE_LAST_PLAN, index=False)
         if os.path.exists(FILE_CONFIG):
             conf_df = pd.read_csv(FILE_CONFIG)
@@ -164,7 +143,3 @@ with t3:
                     for _, c in cam.iterrows(): già_assegnate.append(c['Nome'])
                     risultati.append({"Zona": row['Hotel'], "Ore": round(row['ore'], 1), "Resp": resp, "Squadra": ", ".join(s_icon)})
             st.table(pd.DataFrame(risultati))
-
-    if c2.button("🧹 RESET MATRICE"):
-        if os.path.exists(FILE_LAST_PLAN): os.remove(FILE_LAST_PLAN)
-        st.rerun()
