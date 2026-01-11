@@ -144,6 +144,7 @@ with t3:
         cur_inp[h] = {"AI": v_ai, "FI": v_fi, "CO": v_co, "BI": v_bi}
 
     st.write("") # Spazio extra
+    
     if st.button("🚀 GENERA SCHIERAMENTO", use_container_width=True):
         # ... qui segue la logica di generazione ...
     if st.button("🚀 GENERA SCHIERAMENTO"):
