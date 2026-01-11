@@ -130,57 +130,68 @@ with t3:
         attive = df[~df['Nome'].isin(assenti)].copy()
         pool_spl = attive[attive['Ruolo'] == 'Cameriera'].head(4)['Nome'].tolist()
         
-        fabb = {}
-        for h in lista_hotel:
-            m_ai, m_fi = 60, 30
-            if not conf_df.empty and 'Hotel' in conf_df.columns:
-                t_r = conf_df[conf_df['Hotel'] == h]
-                if not t_r.empty:
-                    m_ai = t_r.iloc[0].get('Arr_Ind', 60); m_fi = t_r.iloc[0].get('Fer_Ind', 30)
-            fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["CO"]*(m_fi/3) + cur_inp[h]["BI"]*(m_fi/4)) / 60
+       # --- VISUALIZZAZIONE RISULTATI E RIEPILOGO ---
+    if 'res_v_fin' in st.session_state:
+        st.divider()
+        tutte_attive = set(n for n in nomi_db if n not in assenti)
         
-        fabb["MACRO: PALME & GARDEN"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
-        z_ordine = ["Hotel Castello", "Hotel Castello 4 Piano", "MACRO: PALME & GARDEN"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
+        final_list = []
+        tutti_scelti = set()
         
-        gia_a = set()
-        ris = []
-        for zona in z_ordine:
-            o_n, t_h, o_f = fabb.get(zona, 0), [], 0
+        # Primo passaggio: raccogliamo tutti i nomi attualmente scelti nei multiselect
+        for i in range(len(st.session_state['res_v_fin'])):
+            val = st.session_state.get(f"edt_f_{i}", [])
+            tutti_scelti.update([n.replace("⭐ ", "").replace(" (Gov.)", "").strip() for n in val])
+        
+        # Secondo passaggio: costruiamo gli expander con il bilancio ore
+        for i, r in enumerate(st.session_state['res_v_fin']):
+            key = f"edt_f_{i}"
+            # Recuperiamo i nomi (se l'utente ha modificato, usa i nuovi, altrimenti i generati)
+            attuali = st.session_state.get(key, [n.strip() for n in r['Team'].split(",") if n.strip()])
             
-            # 1. GOVERNANTI
-            gov = attive[(attive['Ruolo'] == 'Governante') & (~attive['Nome'].isin(gia_a))]
-            mask_g = gov['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)
-            for _, g in gov[mask_g].iterrows():
-                t_h.append(f"⭐ {g['Nome']} (Gov.)"); gia_a.add(g['Nome'])
+            # Calcolo ore coperte (Cameriere: FT=7.5, PT/Spl=5.0)
+            ore_coperte = 0
+            for nome in attuali:
+                n_pulito = nome.replace("⭐ ", "").replace(" (Gov.)", "").strip()
+                match = df[df['Nome'] == n_pulito]
+                if not match.empty:
+                    p_data = match.iloc[0]
+                    if p_data['Ruolo'] == 'Cameriera':
+                        is_pt = p_data.get('Part_Time', 0) == 1
+                        is_spl = n_pulito in st.session_state.get('spl_v_fin', [])
+                        ore_coperte += 5.0 if (is_pt or is_spl) else 7.5
             
-            # 2. CAMERIERE (AFFINITÀ)
-            if o_n > 0 or zona in ["Hotel Castello", "Hotel Castello 4 Piano"]:
-                cand = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
-                cand['Pr'] = cand['Zone_Padronanza'].apply(lambda x: 0 if zona.replace("Hotel ", "").lower() in str(x).lower() else 1)
-                cand = cand.sort_values(['Pr'], ascending=True)
-                for _, p in cand.iterrows():
-                    if p['Nome'] in gia_a: continue
-                    if o_f < (o_n if o_n > 0 else 7.5):
-                        t_h.append(p['Nome']); gia_a.add(p['Nome'])
-                        o_f += 5.0 if (p.get('Part_Time', 0) == 1 or p['Nome'] in pool_spl) else 7.5
-                        c_pref = str(p.get('Lavora_Bene_Con', '')).strip()
-                        if c_pref and c_pref in attive['Nome'].values and c_pref not in gia_a:
-                            t_h.append(c_pref); gia_a.add(c_pref)
-                            p_c = attive[attive['Nome'] == c_pref].iloc[0]
-                            o_f += 5.0 if (p_c.get('Part_Time', 0) == 1 or c_pref in pool_spl) else 7.5
-                    else: break
+            # Recupero sicuro del fabbisogno (Req) per evitare il KeyError
+            fabbisogno = r.get('Req', 0)
+            diff = round(ore_coperte - fabbisogno, 1)
             
-            # 3. PAREGGIAMENTO
-            if len(t_h) > 0 and len(t_h) % 2 != 0:
-                rest = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
-                if not rest.empty:
-                    rest['Pr'] = rest['Zone_Padronanza'].apply(lambda x: 0 if zona.replace("Hotel ", "").lower() in str(x).lower() else 1)
-                    rinf = rest.sort_values(['Pr'], ascending=True).iloc[0]
-                    t_h.append(rinf['Nome']); gia_a.add(rinf['Nome'])
+            if diff >= 0:
+                bilancio_str = f"✅ OK (+{diff}h)"
+                colore_header = "green"
+            else:
+                bilancio_str = f"⚠️ SOTTO ({diff}h)"
+                colore_header = "red"
+            
+            with st.expander(f"📍 {r['Hotel']} | Servono: {fabbisogno}h | Coperti: {ore_coperte}h | {bilancio_str}"):
+                vere_libere = sorted(list(tutte_attive - tutti_scelti))
+                opts = sorted(list(set(attuali) | set(vere_libere)))
+                
+                if len(attuali) % 2 != 0:
+                    st.warning(f"👫 Squadra dispari ({len(attuali)} persone).")
+                
+                scelta = st.multiselect(f"Modifica Team {r['Hotel']}", opts, default=attuali, key=key)
+                final_list.append({"Hotel": r['Hotel'], "Team": ", ".join(scelta), "Bilancio": bilancio_str})
 
-            if t_h: ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Req": round(o_n, 1)})
-        st.session_state['res_v_fin'] = ris; st.session_state['spl_v_fin'] = pool_spl
+        # Riepilogo Panchina
+        vere_libere_finali = sorted(list(tutte_attive - tutti_scelti))
+        if vere_libere_finali:
+            st.info(f"🏃 IN PANCHINA: {', '.join(vere_libere_finali)}")
+        else:
+            st.success("✅ Tutte le risorse sono state impiegate.")
 
+        if st.button("🧊 CONFERMA E SCARICA PDF"):
+            pdf = genera_pdf(data_p.strftime("%d/%m/%Y"), final_list, st.session_state.get('spl_v_fin', []), assenti)
+            st.download_button("📥 DOWNLOAD", pdf, f"Planning_{data_p}.pdf")
     if 'res_v_fin' in st.session_state:
         st.divider()
         tutte_attive = set(n for n in nomi_db if n not in assenti)
