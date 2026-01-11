@@ -237,44 +237,66 @@ with t_plan:
         }
 
     if st.button("🚀 GENERA SCHIERAMENTO", use_container_width=True):
+        # Intestazioni Planning
+    hp = st.columns([2, 1, 1, 1, 1, 1, 1])
+    hp[0].write("**ALBERGO**")
+    hp[1].write("**ARR I**"); hp[2].write("**FERM I**")
+    hp[3].write("**ARR G**"); hp[4].write("**FERM G**")
+    hp[5].write("**COP**"); hp[6].write("**BIANC**")
+
+    cur_inp = {}
+    for h in lista_hotel:
+        r = st.columns([2, 1, 1, 1, 1, 1, 1])
+        r[0].write(f"**{h}**")
+        cur_inp[h] = {
+            "AI": r[1].number_input("AI", 0, 100, 0, key=f"p_ai_{h}", label_visibility="collapsed"),
+            "FI": r[2].number_input("FI", 0, 100, 0, key=f"p_fi_{h}", label_visibility="collapsed"),
+            "AG": r[3].number_input("AG", 0, 100, 0, key=f"p_ag_{h}", label_visibility="collapsed"),
+            "FG": r[4].number_input("FG", 0, 100, 0, key=f"p_fg_{h}", label_visibility="collapsed"),
+            "COP": r[5].number_input("COP", 0, 100, 0, key=f"p_co_{h}", label_visibility="collapsed"),
+            "BIAN": r[6].number_input("BIAN", 0, 100, 0, key=f"p_bi_{h}", label_visibility="collapsed")
+        }
+
+    if st.button("🚀 GENERA SCHIERAMENTO", use_container_width=True):
         conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
+        if not conf_df.empty:
+            conf_df.columns = [str(c).strip().upper() for c in conf_df.columns]
+        
         attive = df[~df['Nome'].isin(assenti)].copy()
         pool_spl = attive[attive['Ruolo'] == 'Cameriera'].head(4)['Nome'].tolist()
         st.session_state['spl_v_fin'] = pool_spl
         
-        if not conf_df.empty:
-            conf_df.columns = [str(c).strip().upper() for c in conf_df.columns]
-            if 'HOTEL' not in conf_df.columns:
-                conf_df.rename(columns={conf_df.columns[0]: 'HOTEL'}, inplace=True)
-        
         fabb = {}
         for h in lista_hotel:
-            m = conf_df[conf_df['HOTEL'] == h] if not conf_df.empty else pd.DataFrame()
+            m = conf_df[conf_df['HOTEL'] == h.upper()] if not conf_df.empty else pd.DataFrame()
             if not m.empty:
-                m_ai = m.iloc[0].get('AI', 60); m_fi = m.iloc[0].get('FI', 30)
-                m_ag = m.iloc[0].get('AG', 45); m_fg = m.iloc[0].get('FG', 25)
+                m_ai, m_fi = m.iloc[0]['AI'], m.iloc[0]['FI']
+                m_ag, m_fg = m.iloc[0]['AG'], m.iloc[0]['FG']
             else: m_ai, m_fi, m_ag, m_fg = 60, 30, 45, 25
             
-            # Calcolo ore totali includendo i 15 min per il cambio biancheria sulle fermate
-            tot_f = cur_inp[h]["FI"] + cur_inp[h]["FG"]
-            fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["AG"]*m_ag + cur_inp[h]["FG"]*m_fg + tot_f*15) / 60
+            # CALCOLO AUTOMATICO: Coperture (1/3 FI) e Biancheria (1/4 FI o FG)
+            t_cop = (m_fi / 3) * cur_inp[h]["COP"]
+            t_bian = (m_fi / 4) * cur_inp[h]["BIAN"]
+            
+            ore_tot = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + 
+                       cur_inp[h]["AG"]*m_ag + cur_inp[h]["FG"]*m_fg + 
+                       t_cop + t_bian) / 60
+            fabb[h] = ore_tot
         
         fabb["MACRO: PALME & GARDEN"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
         z_ord = ["Hotel Castello", "Hotel Castello 4 Piano", "MACRO: PALME & GARDEN"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
         
-       # 5. Ciclo di assegnazione
         gia_a, ris = set(), []
         for zona in z_ord:
             o_n, t_h, o_f = fabb.get(zona, 0), [], 0
             
-            # Governanti
+            # --- GOVERNANTI ⭐ ---
             gov = attive[(attive['Ruolo'] == 'Governante') & (~attive['Nome'].isin(gia_a))]
             mask_g = gov['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)
             for _, g in gov[mask_g].iterrows():
-                t_h.append(f"⭐ {g['Nome']} (Gov.)")
-                gia_a.add(g['Nome'])
+                t_h.append(f"⭐ {g['Nome']} (Gov.)"); gia_a.add(g['Nome'])
             
-            # Cameriere
+            # --- CAMERIERE ---
             if o_n > 0 or zona in ["Hotel Castello", "Hotel Castello 4 Piano"]:
                 cand = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
                 cand['Pr'] = cand['Zone_Padronanza'].apply(lambda x: 0 if zona.replace("Hotel ", "").lower() in str(x).lower() else 1)
@@ -283,26 +305,16 @@ with t_plan:
                     if o_f < (o_n if o_n > 0 else 7.5):
                         is_spl, is_pt = p['Nome'] in pool_spl, p['Part_Time'] == 1
                         ico = "🌙 " if is_spl else ("🕒 " if is_pt else "")
-                        t_h.append(f"{ico}{p['Nome']}")
-                        gia_a.add(p['Nome'])
+                        t_h.append(f"{ico}{p['Nome']}"); gia_a.add(p['Nome'])
                         o_f += 5.0 if (is_pt or is_spl) else 7.5
-                        
-                        c_pre = str(p.get('Lavora_Bene_Con', '')).strip()
-                        if c_pre in attive['Nome'].values and c_pre not in gia_a:
-                            p_c = attive[attive['Nome'] == c_pre].iloc[0]
-                            ico_c = "🌙 " if c_pre in pool_spl else ("🕒 " if p_c['Part_Time'] == 1 else "")
-                            t_h.append(f"{ico_c}{c_pre}"); gia_a.add(c_pre)
-                            o_f += 5.0 if (p_c['Part_Time'] == 1 or c_pre in pool_spl) else 7.5
                     else: break
             
             if t_h:
-                # CREAZIONE INFO PER ETICHETTA (Importante per evitare KeyError)
                 n_gov = len([n for n in t_h if "⭐" in n])
                 n_spl = len([n for n in t_h if "🌙" in n])
                 n_pt = len([n for n in t_h if "🕒" in n])
                 n_std = len(t_h) - n_gov - n_spl - n_pt
-                info_txt = f"Tot: {len(t_h)} (G:{n_gov} S:{n_std} PT:{n_pt} 🌙:{n_spl})"
-                
+                info_txt = f"G:{n_gov} Std:{n_std} 🕒:{n_pt} 🌙:{n_spl}"
                 ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Req": round(o_n, 1), "Info": info_txt})
         
         st.session_state['res_v_fin'] = ris
