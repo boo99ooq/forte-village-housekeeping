@@ -225,7 +225,7 @@ with t_tempi:
     suggeriti = [r['Nome'] for _, r in df.iterrows() if r.get('Riposo_Pref') in [giorno_sett_p, data_p_str]] if not df.empty else []
     assenti = c_a.multiselect("🛌 Assenti/Riposi:", nomi_db, default=suggeriti)
     
-    # Intestazioni Planning (Spostate a destra rispetto a with t_plan)
+    # --- Intestazioni Planning ---
     hp = st.columns([2, 1, 1, 1, 1, 1, 1])
     hp[0].write("**ALBERGO**")
     hp[1].write("**ARR I**"); hp[2].write("**FERM I**")
@@ -249,6 +249,8 @@ with t_tempi:
         conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
         if not conf_df.empty:
             conf_df.columns = [str(c).strip().upper() for c in conf_df.columns]
+            if 'HOTEL' not in conf_df.columns:
+                conf_df.rename(columns={conf_df.columns[0]: 'HOTEL'}, inplace=True)
         
         attive = df[~df['Nome'].isin(assenti)].copy()
         pool_spl = attive[attive['Ruolo'] == 'Cameriera'].head(4)['Nome'].tolist()
@@ -258,18 +260,17 @@ with t_tempi:
         for h in lista_hotel:
             m = conf_df[conf_df['HOTEL'] == h.upper()] if not conf_df.empty else pd.DataFrame()
             if not m.empty:
-                m_ai, m_fi = m.iloc[0]['AI'], m.iloc[0]['FI']
-                m_ag, m_fg = m.iloc[0]['AG'], m.iloc[0]['FG']
+                m_ai = m.iloc[0].get('AI', 60); m_fi = m.iloc[0].get('FI', 30)
+                m_ag = m.iloc[0].get('AG', 45); m_fg = m.iloc[0].get('FG', 25)
             else: m_ai, m_fi, m_ag, m_fg = 60, 30, 45, 25
             
-            # CALCOLO AUTOMATICO: Coperture (1/3 FI) e Biancheria (1/4 FI o FG)
+            # Calcolo automatico COP (1/3 FI) e BIANC (1/4 FI)
             t_cop = (m_fi / 3) * cur_inp[h]["COP"]
             t_bian = (m_fi / 4) * cur_inp[h]["BIAN"]
             
-            ore_tot = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + 
+            fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + 
                        cur_inp[h]["AG"]*m_ag + cur_inp[h]["FG"]*m_fg + 
                        t_cop + t_bian) / 60
-            fabb[h] = ore_tot
         
         fabb["MACRO: PALME & GARDEN"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
         z_ord = ["Hotel Castello", "Hotel Castello 4 Piano", "MACRO: PALME & GARDEN"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
@@ -278,13 +279,13 @@ with t_tempi:
         for zona in z_ord:
             o_n, t_h, o_f = fabb.get(zona, 0), [], 0
             
-            # --- GOVERNANTI ⭐ ---
+            # Governanti ⭐
             gov = attive[(attive['Ruolo'] == 'Governante') & (~attive['Nome'].isin(gia_a))]
             mask_g = gov['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)
             for _, g in gov[mask_g].iterrows():
                 t_h.append(f"⭐ {g['Nome']} (Gov.)"); gia_a.add(g['Nome'])
             
-            # --- CAMERIERE ---
+            # Cameriere
             if o_n > 0 or zona in ["Hotel Castello", "Hotel Castello 4 Piano"]:
                 cand = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
                 cand['Pr'] = cand['Zone_Padronanza'].apply(lambda x: 0 if zona.replace("Hotel ", "").lower() in str(x).lower() else 1)
@@ -309,12 +310,9 @@ with t_tempi:
         st.rerun()
 
     if 'res_v_fin' in st.session_state:
-        st.divider()
-        final_l = []
+        st.divider(); final_l = []
         for i, r in enumerate(st.session_state['res_v_fin']):
-            # Usiamo .get() per sicurezza: se Info non esiste, mette stringa vuota
-            label_info = r.get('Info', 'Team Generato')
-            with st.expander(f"📍 {r['Hotel']} | {label_info} | {r['Req']}h"):
+            with st.expander(f"📍 {r['Hotel']} | {r.get('Info','')} | {r['Req']}h"):
                 def_p = [n.replace("⭐ ", "").replace(" (Gov.)", "").replace("🌙 ", "").replace("🕒 ", "").strip() for n in r['Team'].split(",")]
                 s = st.multiselect(f"Modifica {r['Hotel']}", nomi_db, default=def_p, key=f"e_{i}")
                 final_l.append({"Hotel": r['Hotel'], "Team": ", ".join(s)})
