@@ -123,43 +123,76 @@ with t_staff:
     st.header("📝 Scheda Personale")
     nomi_db = sorted(df['Nome'].unique().tolist()) if not df.empty else []
     sel_n = st.selectbox("Seleziona collaboratrice:", ["--- NUOVA ---"] + nomi_db)
-    curr = df[df['Nome'] == sel_n].iloc[0] if sel_n != "--- NUOVA ---" else None
     
-    with st.form("form_staff_full"):
+    # Logica corretta per estrarre i dati
+    curr = None
+    if sel_n != "--- NUOVA ---":
+        match = df[df['Nome'] == sel_n]
+        if not match.empty:
+            curr = match.iloc[0]
+    
+    # Inizio Form
+    with st.form("form_staff_definitivo"):
         c1, c2, c3 = st.columns(3)
-        f_nome = c1.text_input("Nome", value=str(curr['Nome']) if curr else "")
-        f_ruolo = c2.selectbox("Ruolo", ["Cameriera", "Governante"], index=1 if curr and "overnante" in str(curr['Ruolo']).lower() else 0)
-        f_padro = c3.multiselect("Padronanza", lista_hotel, default=[z.strip() for z in str(curr['Zone_Padronanza']).split(",")] if curr and curr['Zone_Padronanza'] else [])
+        f_nome = c1.text_input("Nome", value=str(curr['Nome']) if curr is not None else "")
+        f_ruolo = c2.selectbox("Ruolo", ["Cameriera", "Governante"], 
+                               index=1 if curr is not None and "overnante" in str(curr['Ruolo']).lower() else 0)
+        
+        # Gestione multiselect sicura
+        def_padro = []
+        if curr is not None and curr['Zone_Padronanza']:
+            def_padro = [z.strip() for z in str(curr['Zone_Padronanza']).split(",") if z.strip() in lista_hotel]
+        f_padro = c3.multiselect("Padronanza", lista_hotel, default=def_padro)
         
         st.divider()
         c4, c5, c6 = st.columns(3)
-        f_pt = c4.checkbox("🕒 Part-Time", value=bool(curr.get('Part_Time', 0)) if curr else False)
-        f_jol = c4.checkbox("🃏 Jolly", value=bool(curr.get('Jolly', 0)) if curr else False)
-        f_pen = c5.checkbox("🚌 Pendolare", value=bool(curr.get('Pendolare', 0)) if curr else False)
-        f_via = c5.text_input("🚗 Viaggia con", value=str(curr.get('Viaggia_Con', '')) if curr else "")
-        f_rip = c6.text_input("📅 Riposo Pref.", value=str(curr.get('Riposo_Pref', '')) if curr else "")
-        f_lbc = c6.selectbox("🤝 Lavora bene con", ["Nessuna"] + nomi_db, index=nomi_db.index(curr['Lavora_Bene_Con'])+1 if curr and curr['Lavora_Bene_Con'] in nomi_db else 0)
+        f_pt = c4.checkbox("🕒 Part-Time", value=bool(curr['Part_Time']) if curr is not None else False)
+        f_jol = c4.checkbox("🃏 Jolly", value=bool(curr['Jolly']) if curr is not None else False)
+        f_pen = c5.checkbox("🚌 Pendolare", value=bool(curr['Pendolare']) if curr is not None else False)
+        f_via = c5.text_input("🚗 Viaggia con", value=str(curr['Viaggia_Con']) if curr is not None else "")
+        f_rip = c6.text_input("📅 Riposo Pref.", value=str(curr['Riposo_Pref']) if curr is not None else "")
+        
+        # Selezione partner sicura
+        idx_partner = 0
+        if curr is not None and curr['Lavora_Bene_Con'] in nomi_db:
+            idx_partner = nomi_db.index(curr['Lavora_Bene_Con']) + 1
+        f_lbc = c6.selectbox("🤝 Lavora bene con", ["Nessuna"] + nomi_db, index=idx_partner)
 
         st.divider()
         v1, v2, v3 = st.columns(3)
-        f_prof = v1.slider("Professionalità", 1, 10, int(curr['Professionalita']) if curr else 5)
-        f_esp = v2.slider("Esperienza", 1, 10, int(curr['Esperienza']) if curr else 5)
-        f_ten = v3.slider("Tenuta Fisica", 1, 10, int(curr['Tenuta_Fisica']) if curr else 5)
-        f_dis = v1.slider("Disponibilità", 1, 10, int(curr.get('Disponibilita', 5)) if curr else 5)
-        f_emp = v2.slider("Empatia", 1, 10, int(curr.get('Empatia', 5)) if curr else 5)
-        f_gui = v3.slider("Guida", 1, 10, int(curr.get('Capacita_Guida', 5)) if curr else 5)
+        f_prof = v1.slider("Professionalità", 1, 10, int(curr['Professionalita']) if curr is not None else 5)
+        f_esp = v2.slider("Esperienza", 1, 10, int(curr['Esperienza']) if curr is not None else 5)
+        f_ten = v3.slider("Tenuta Fisica", 1, 10, int(curr['Tenuta_Fisica']) if curr is not None else 5)
+        f_dis = v1.slider("Disponibilità", 1, 10, int(curr['Disponibilita']) if curr is not None else 5)
+        f_emp = v2.slider("Empatia", 1, 10, int(curr['Empatia']) if curr is not None else 5)
+        f_gui = v3.slider("Guida", 1, 10, int(curr['Capacita_Guida']) if curr is not None else 5)
 
-        if st.form_submit_button("💾 SALVA SCHEDA"):
+        # IL BOTTONE DI SALVATAGGIO DEVE ESSERE DENTRO IL FORM
+        submitted = st.form_submit_button("💾 SALVA SCHEDA")
+        if submitted:
             if f_nome:
-                nuova_r = {"Nome": f_nome.strip(), "Ruolo": f_ruolo, "Zone_Padronanza": ", ".join(f_padro), "Part_Time": 1 if f_pt else 0, "Jolly": 1 if f_jol else 0, "Pendolare": 1 if f_pen else 0, "Riposo_Pref": f_rip, "Viaggia_Con": f_via, "Lavora_Bene_Con": f_lbc, "Professionalita": f_prof, "Esperienza": f_esp, "Tenuta_Fisica": f_ten, "Disponibilita": f_dis, "Empatia": f_emp, "Capacita_Guida": f_gui}
-                df = df[df['Nome'] != sel_n] if curr is not None else df
-                df = pd.concat([df, pd.DataFrame([nuova_r])], ignore_index=True); save_data(df); st.success("Salvato!"); st.rerun()
+                nuova_r = {
+                    "Nome": f_nome.strip(), "Ruolo": f_ruolo, "Zone_Padronanza": ", ".join(f_padro),
+                    "Part_Time": 1 if f_pt else 0, "Jolly": 1 if f_jol else 0, "Pendolare": 1 if f_pen else 0,
+                    "Riposo_Pref": f_rip, "Viaggia_Con": f_via, "Lavora_Bene_Con": f_lbc,
+                    "Professionalita": f_prof, "Esperienza": f_esp, "Tenuta_Fisica": f_ten,
+                    "Disponibilita": f_dis, "Empatia": f_emp, "Capacita_Guida": f_gui
+                }
+                # Rimuove vecchia voce e aggiunge la nuova
+                df_updated = df[df['Nome'] != (curr['Nome'] if curr is not None else "---")].copy()
+                df_updated = pd.concat([df_updated, pd.DataFrame([nuova_r])], ignore_index=True)
+                save_data(df_updated)
+                st.success("Scheda salvata con successo!")
+                st.rerun()
+            else:
+                st.error("Il nome è obbligatorio.")
 
+    # IL BOTTONE PDF DEVE ESSERE FUORI DAL FORM
     if curr is not None:
+        st.write("---")
         if st.button("📄 GENERA PDF SCHEDA PERSONALE"):
             pdf_s = pdf_scheda_staff(curr)
             st.download_button(f"📥 Scarica scheda {curr['Nome']}", pdf_s, f"Scheda_{curr['Nome']}.pdf")
-
 # --- TAB TEMPI ---
 with t_tempi:
     st.header("⚙️ Tempi Standard")
