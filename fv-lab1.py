@@ -284,7 +284,7 @@ with t_plan:
         pool_spl = attive[attive['Ruolo'] == 'Cameriera'].head(4)['Nome'].tolist()
         st.session_state['spl_v_fin'] = pool_spl
         
-    fabb = {}
+        fabb = {}
         for h in lista_hotel:
             # Ora cerchiamo 'HOTEL' in maiuscolo
             m = conf_df[conf_df['HOTEL'] == h]
