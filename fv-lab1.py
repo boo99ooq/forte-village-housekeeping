@@ -254,13 +254,20 @@ with t_plan:
         z_ord = ["Hotel Castello", "Hotel Castello 4 Piano", "MACRO: PALME & GARDEN"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
         
         # 3. Prepari le variabili e inizi il ciclo
+        # 3. Prepari le variabili e inizi il ciclo
         gia_a, ris = set(), []
         for zona in z_ord:
-            # ... qui segue tutto il resto del codice ...
+            # Questa riga "pulisce" il team per ogni nuova zona che il ciclo analizza
+            o_n, t_h, o_f = fabb.get(zona, 0), [], 0
+            
             # Governanti
             gov = attive[(attive['Ruolo'] == 'Governante') & (~attive['Nome'].isin(gia_a))]
-            for _, g in gov[gov['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)].iterrows():
-                t_h.append(f"⭐ {g['Nome']} (Gov.)"); gia_a.add(g['Nome'])
+            # Filtro per padronanza zona
+            mask_g = gov['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)
+            
+            for _, g in gov[mask_g].iterrows():
+                t_h.append(f"⭐ {g['Nome']} (Gov.)")
+                gia_a.add(g['Nome'])
             # Cameriere
             if o_n > 0 or zona in ["Hotel Castello", "Hotel Castello 4 Piano"]:
                 cand = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
