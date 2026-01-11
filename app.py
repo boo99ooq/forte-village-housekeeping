@@ -96,8 +96,20 @@ t1, t2, t3 = st.tabs(["🏆 Dashboard", "⚙️ Tempi", "🚀 Planning"])
 with t1:
     st.header("🏆 Performance Staff")
     if not df.empty:
-        df[['Performance', 'Rating_Num']] = df.apply(lambda r: pd.Series(get_rating_bar(r)), axis=1)
-        st.dataframe(df[['Nome', 'Ruolo', 'Performance', 'Auto', 'Zone_Padronanza']], use_container_width=True, hide_index=True)
+        # Filtro Zona di Padronanza
+        filtro_zona = st.selectbox("🔍 Filtra per Zona di Padronanza:", ["TUTTI"] + lista_hotel)
+        
+        # Calcolo performance
+        df_display = df.copy()
+        df_display[['Performance', 'Rating_Num']] = df_display.apply(lambda r: pd.Series(get_rating_bar(r)), axis=1)
+        
+        # Applicazione filtro
+        if filtro_zona != "TUTTI":
+            df_display = df_display[df_display['Zone_Padronanza'] == filtro_zona]
+        
+        st.dataframe(df_display[['Nome', 'Ruolo', 'Performance', 'Auto', 'Zone_Padronanza']], use_container_width=True, hide_index=True)
+    else:
+        st.info("Nessun collaboratore nel database. Aggiungine uno dalla sidebar.")
 
 with t2:
     st.header("⚙️ Tempi Standard")
