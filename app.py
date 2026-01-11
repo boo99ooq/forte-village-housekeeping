@@ -36,43 +36,50 @@ df = load_data()
 lista_hotel = ["Hotel Castello", "Hotel Castello Garden", "Castello 4 Piano", "Cala del Forte", "Le Dune", "Villa del Parco", "Hotel Pineta", "Bouganville", "Le Palme", "Il Borgo", "Le Ville", "Spazi Comuni"]
 
 # --- SIDEBAR: GESTIONE ---
-with st.sidebar:
-    st.header("👤 Pannello Staff")
-    nomi_staff = ["--- NUOVO ---"] + sorted(df['Nome'].tolist()) if not df.empty else ["--- NUOVO ---"]
-    sel = st.selectbox("Seleziona:", nomi_staff)
-    
-    # Correzione logica per evitare ValueError
-    current = None
-    if sel != "--- NUOVO ---":
-        current = df[df['Nome'] == sel].iloc[0]
-
-    with st.form("form_staff"):
+with st.form("form_staff"):
         f_nome = st.text_input("Nome", value=str(current['Nome']) if current is not None else "")
         f_ruolo = st.selectbox("Ruolo", ["Cameriera", "Governante"], 
                                index=0 if current is None or "Cameriera" in str(current['Ruolo']) else 1)
         f_auto = st.text_input("Auto", value=str(current['Auto']) if current is not None else "")
+        f_zone = st.text_input("Zone Padronanza", value=str(current['Zone_Padronanza']) if current is not None else "")
         
-        st.write("Voti (1-10)")
+        st.write("--- Valutazioni (1-10) ---")
         c1, c2 = st.columns(2)
-        f_pro = c1.number_input("Prof.", 0, 10, int(pd.to_numeric(current['Professionalita'], errors='coerce') or 5) if current is not None else 5)
-        f_esp = c2.number_input("Esp.", 0, 10, int(pd.to_numeric(current['Esperienza'], errors='coerce') or 5) if current is not None else 5)
+        # Inserimento di tutti i parametri per il calcolo dei mattoncini
+        f_pro = c1.number_input("Professionalità", 0, 10, int(pd.to_numeric(current['Professionalita'], errors='coerce') or 5) if current is not None else 5)
+        f_esp = c2.number_input("Esperienza", 0, 10, int(pd.to_numeric(current['Esperienza'], errors='coerce') or 5) if current is not None else 5)
+        f_ten = c1.number_input("Tenuta Fisica", 0, 10, int(pd.to_numeric(current['Tenuta_Fisica'], errors='coerce') or 5) if current is not None else 5)
+        f_dis = c2.number_input("Disponibilità", 0, 10, int(pd.to_numeric(current['Disponibilita'], errors='coerce') or 5) if current is not None else 5)
+        f_emp = c1.number_input("Empatia", 0, 10, int(pd.to_numeric(current['Empatia'], errors='coerce') or 5) if current is not None else 5)
+        f_gui = c2.number_input("Capacità Guida", 0, 10, int(pd.to_numeric(current['Capacita_Guida'], errors='coerce') or 5) if current is not None else 5)
         
-        # IL BOTTONE MANCANTE
-        submitted = st.form_submit_button("💾 SALVA SCHEDA")
+        submitted = st.form_submit_button("💾 SALVA SCHEDA COMPLETA")
         if submitted:
-            nuova_data = {"Nome": f_nome, "Ruolo": f_ruolo, "Auto": f_auto, "Professionalita": f_pro, "Esperienza": f_esp}
+            # Creiamo il dizionario con i dati aggiornati
+            nuova_data = {
+                "Nome": f_nome, 
+                "Ruolo": f_ruolo, 
+                "Auto": f_auto, 
+                "Zone_Padronanza": f_zone,
+                "Professionalita": f_pro, 
+                "Esperienza": f_esp,
+                "Tenuta_Fisica": f_ten,
+                "Disponibilita": f_dis,
+                "Empatia": f_emp,
+                "Capacita_Guida": f_gui
+            }
+            
+            # Se stiamo modificando, manteniamo i valori delle colonne che non sono nel form (es. Jolly, Pendolare)
             if current is not None:
                 for col in df.columns:
-                    if col not in nuova_data: nuova_data[col] = current[col]
+                    if col not in nuova_data: 
+                        nuova_data[col] = current[col]
                 df = df[df['Nome'] != sel]
+            
             df = pd.concat([df, pd.DataFrame([nuova_data])], ignore_index=True)
             save_data(df)
+            st.success(f"Dati di {f_nome} aggiornati correttamente!")
             st.rerun()
-
-    st.divider()
-    csv = df.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Scarica Backup CSV", csv, "Housekeeping_DB_Staff.csv", "text/csv")
-
 # --- TABS ---
 t1, t2, t3 = st.tabs(["🏆 Dashboard", "⚙️ Tempi", "🚀 Planning"])
 
