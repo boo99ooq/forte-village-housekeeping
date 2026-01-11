@@ -96,21 +96,26 @@ t1, t2, t3 = st.tabs(["🏆 Dashboard", "⚙️ Tempi", "🚀 Planning"])
 with t1:
     st.header("🏆 Performance Staff")
     if not df.empty:
-        # Filtro Zona di Padronanza
+        # 1. Filtro Zona di Padronanza (con ricerca flessibile)
         filtro_zona = st.selectbox("🔍 Filtra per Zona di Padronanza:", ["TUTTI"] + lista_hotel)
         
-        # Calcolo performance
+        # 2. Calcolo performance e pulizia dati
         df_display = df.copy()
         df_display[['Performance', 'Rating_Num']] = df_display.apply(lambda r: pd.Series(get_rating_bar(r)), axis=1)
         
-        # Applicazione filtro
+        # 3. Applicazione filtro "Contiene" invece di "Uguale"
         if filtro_zona != "TUTTI":
-            df_display = df_display[df_display['Zone_Padronanza'] == filtro_zona]
+            # Usiamo str.contains per trovare la zona all'interno di una lista di zone
+            # na=False serve a ignorare i campi vuoti senza dare errore
+            mask = df_display['Zone_Padronanza'].str.contains(filtro_zona, case=False, na=False)
+            df_display = df_display[mask]
         
-        st.dataframe(df_display[['Nome', 'Ruolo', 'Performance', 'Auto', 'Zone_Padronanza']], use_container_width=True, hide_index=True)
+        # 4. Visualizzazione
+        st.write(f"Risultati trovati: **{len(df_display)}**")
+        st.dataframe(df_display[['Nome', 'Ruolo', 'Performance', 'Auto', 'Zone_Padronanza']], 
+                     use_container_width=True, hide_index=True)
     else:
-        st.info("Nessun collaboratore nel database. Aggiungine uno dalla sidebar.")
-
+        st.info("Nessun collaboratore nel database.")
 with t2:
     st.header("⚙️ Tempi Standard")
     c_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
