@@ -9,6 +9,7 @@ st.set_page_config(page_title="Executive Housekeeping - Master", layout="wide")
 FILE_DATA = 'housekeeping_database.csv'
 FILE_CONFIG = 'config_tempi.csv'
 FILE_LAST_PLAN = 'ultimo_planning_caricato.csv'
+FILE_HOTELS = 'hotel_list.csv'
 
 # --- CARICAMENTO DATI ---
 def load_data():
@@ -25,13 +26,26 @@ def load_data():
     return pd.DataFrame(columns=cols)
 
 def load_hotels():
-    # Aggiunto "Cala del Forte" e "Spazi Comuni"
-    return ["Hotel Castello", "Hotel Castello Garden", "Castello 4 Piano", "Cala del Forte", "Le Dune", "Villa del Parco", "Bouganville", "Le Palme", "Il Borgo", "Le Ville", "Spazi Comuni"]
+    # Lista completa di default (Inclusi Pineta e Spazi Comuni)
+    h_def = [
+        "Hotel Castello", "Hotel Castello Garden", "Castello 4 Piano", 
+        "Cala del Forte", "Le Dune", "Villa del Parco", "Hotel Pineta",
+        "Bouganville", "Le Palme", "Il Borgo", "Le Ville", "Spazi Comuni"
+    ]
+    if os.path.exists(FILE_HOTELS):
+        try:
+            # Se hai il file CSV, prova a leggere la colonna 'Nome_Hotel' o la prima colonna
+            df_h = pd.read_csv(FILE_HOTELS)
+            col_name = df_h.columns[0]
+            lista = df_h[col_name].str.strip().tolist()
+            return [h for h in lista if h] if lista else h_def
+        except: return h_def
+    return h_def
 
 df = load_data()
 lista_hotel = load_hotels()
 
-# --- SIDEBAR ---
+# --- SIDEBAR (Gestione Staff) ---
 with st.sidebar:
     st.header("⚙️ Gestione Staff")
     if not df.empty:
@@ -52,7 +66,6 @@ with st.sidebar:
         z_at = str(dati.get('Zone_Padronanza', "")).split(", ")
         
         if is_gov:
-            st.info("Assegnazione Fissa")
             sel_z = st.multiselect("Destinazione:", lista_hotel, default=[h for h in z_at if h in lista_hotel])
             z_ass = ", ".join(sel_z)
         else:
@@ -84,7 +97,7 @@ with t2:
 
     new_config = []
     h_c = st.columns([2, 1, 1, 1, 1])
-    for i, txt in enumerate(["DESTINAZIONE", "Arr. I", "Fer. I", "Arr. G", "Fer. G"]): h_c[i].caption(txt)
+    for i, txt in enumerate(["ZONA", "Arr. I", "Fer. I", "Arr. G", "Fer. G"]): h_c[i].caption(txt)
 
     for h in lista_hotel:
         row_exist = c_df[c_df['Hotel'] == h]
@@ -99,7 +112,7 @@ with t2:
 
     if st.button("💾 CONGELA TEMPI"):
         pd.DataFrame(new_config).to_csv(FILE_CONFIG, index=False)
-        st.success("Configurazione aggiornata!")
+        st.success("Configurazione salvata con successo!")
 
 with t3:
     st.header("🚀 Piano Operativo Resort")
@@ -133,7 +146,7 @@ with t3:
             già_assegnate = []
             
             for row in current_input:
-                h_c = conf_df[conf_df['Hotel'] == row['Hotel']].iloc[0]
+                h_c = conf_df[conf_df['Hotel'] == row['Hotel']].iloc[0] if row['Hotel'] in conf_df['Hotel'].values else conf_df.iloc[0]
                 row['ore'] = ((row['AI'] + row['VI']) * h_c['Arr_Ind'] + (row['FI'] * h_c['Fer_Ind']) + (row['AG'] + row['VG']) * h_c['Arr_Gru'] + (row['FG'] * h_c['Fer_Gru'])) / 60
             
             for row in sorted(current_input, key=lambda x: x['ore'], reverse=True):
@@ -152,6 +165,6 @@ with t3:
                     risultati.append({"Zona": row['Hotel'], "Ore": round(row['ore'], 1), "Resp": resp, "Squadra": ", ".join(s_icon)})
             st.table(pd.DataFrame(risultati))
 
-    if c2.button("🧹 RESET"):
+    if c2.button("🧹 RESET MATRICE"):
         if os.path.exists(FILE_LAST_PLAN): os.remove(FILE_LAST_PLAN)
         st.rerun()
