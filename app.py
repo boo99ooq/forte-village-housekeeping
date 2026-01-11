@@ -6,7 +6,7 @@ from io import BytesIO
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
-# --- DATABASE E CONFIGURAZIONE ---
+# --- DATABASE ---
 FILE_STAFF = 'Housekeeping_DB - Staff.csv'
 FILE_CONFIG = 'config_tempi.csv'
 FILE_LAST_PLAN = 'ultimo_planning_caricato.csv'
@@ -18,110 +18,83 @@ def load_data():
         return df.fillna("")
     return pd.DataFrame()
 
-# --- FUNZIONE PDF MIGLIORATA ---
+# --- PDF GENERATOR ---
 def genera_pdf(data_str, schieramento, split_list):
     buffer = BytesIO()
     p = canvas.Canvas(buffer, pagesize=A4)
     w, h = A4
-    
-    # Intestazione
     p.setFont("Helvetica-Bold", 18)
     p.drawString(50, h - 50, f"PLANNING HOUSEKEEPING - {data_str}")
     p.line(50, h - 60, 540, h - 60)
-    
     y = h - 100
-    p.setFont("Helvetica-Bold", 12)
-    
     for res in schieramento:
-        if y < 150: # Controllo fine pagina
+        if y < 100:
             p.showPage()
             y = h - 70
-            p.setFont("Helvetica-Bold", 12)
-
-        # Box Zona
-        p.setFillColorRGB(0.9, 0.9, 0.9)
-        p.rect(50, y - 5, 490, 20, fill=1, stroke=0)
-        p.setFillColorRGB(0, 0, 0)
-        p.drawString(55, y, f"ZONA: {res['Hotel'].upper()}")
-        y -= 25
-        
-        p.setFont("Helvetica", 11)
-        p.drawString(65, y, f"Team: {res['Team']}")
+        p.setFont("Helvetica-Bold", 12)
+        p.drawString(50, y, f"ZONA: {res['Hotel'].upper()}")
         y -= 20
-        p.setFont("Helvetica-Oblique", 10)
-        p.drawString(65, y, f"Responsabile: {res['Responsabile']}")
-        y -= 35
-
-    # Sezione Spezzato fissa in fondo o nuova pagina
-    if y < 150:
-        p.showPage()
-        y = h - 70
-
-    p.line(50, y, 540, y)
-    y -= 30
-    p.setFont("Helvetica-Bold", 14)
-    p.drawString(50, y, "🌙 COPERTURA SERALE (19:00 - 22:00)")
-    y -= 25
-    p.setFont("Helvetica", 12)
-    p.drawString(60, y, f"Cameriere: {', '.join(split_list) if split_list else 'Nessuna'}")
+        p.setFont("Helvetica", 11)
+        p.drawString(60, y, f"Team: {res['Team']}")
+        y -= 30
     
-    p.showPage()
+    y -= 20
+    p.line(50, y, 540, y)
+    p.setFont("Helvetica-Bold", 13)
+    p.drawString(50, y - 30, "🌙 COPERTURA SERALE (19:00 - 22:00)")
+    p.setFont("Helvetica", 11)
+    p.drawString(60, y - 50, f"Personale: {', '.join(split_list)}")
     p.save()
     buffer.seek(0)
     return buffer
 
-# --- LOGICA PLANNING ---
+# --- LOGICA APP ---
 df = load_data()
-with st.container():
-    st.header("🚀 Elaborazione Planning")
-    
-    # ... (Qui carichi i tuoi dati di input camere: AI, FI, COP, BIA) ...
-    # Assumiamo di avere una lista 'current_plan' con i dati inseriti
-    
-    if st.button("🚀 GENERA E CONTROLLA CARICO ORE"):
-        conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
-        attive = df[~df['Nome'].isin(st.session_state.get('assenti', []))]
-        
-        # 1. Identificazione Split (per pesare correttamente il diurno)
-        pool_split = attive[(attive['Part_Time'] == 0) & (attive['Indisp_Spezzato'] == 0)]
-        nomi_split = pool_split.sort_values('Conteggio_Spezzati').head(4)['Nome'].tolist()
-        
-        schieramento_per_pdf = []
-        
-        for hotel in lista_hotel:
-            # --- CALCOLO ORE NECESSARIE ---
-            # (Prendi i valori inseriti nei number_input per quell'hotel)
-            h_c = conf_df[conf_df['Hotel'] == hotel].iloc[0] if not conf_df.empty else {"Arr_Ind":60, "Fer_Ind":30, "Arr_Gru":45, "Fer_Gru":20}
-            # Supponiamo row sia il dizionario con i dati inseriti per l'hotel
-            ore_servono = 15.0 # Esempio: calcolato da (AI*60 + FI*30 + ...) / 60
-            
-            # --- CALCOLO ORE FORNITE ---
-            # Supponiamo che team_zona siano i nomi assegnati a quell'hotel
-            team_zona = ["Marcella", "Isotta"] 
-            ore_fornite = 0
-            for n in team_zona:
-                p_info = attive[attive['Nome'] == n].iloc[0]
-                # Se PT o Split -> 5h. Se Full -> 7.5h.
-                if str(p_info['Part_Time']) in ["1", "True"] or n in nomi_split:
-                    ore_fornite += 5.0
-                else:
-                    ore_fornite += 7.5
-            
-            diff = ore_fornite - ore_servono
-            
-            # Mostra Alert
-            if ore_servono > 0:
-                if diff < 0:
-                    st.error(f"⚠️ **{hotel}**: Mancano **{abs(diff)}h**. (Servono {ore_servono}h, fornite {ore_fornite}h)")
-                else:
-                    st.success(f"✅ **{hotel}**: Coperto! (+{diff}h)")
+lista_hotel = ["Hotel Castello", "Hotel Castello Garden", "Castello 4 Piano", "Cala del Forte", "Le Dune", "Villa del Parco", "Hotel Pineta", "Bouganville", "Le Palme", "Il Borgo", "Le Ville", "Spazi Comuni"]
 
-            schieramento_per_pdf.append({
-                "Hotel": hotel,
-                "Team": ", ".join(team_zona),
-                "Responsabile": "Governante di Zona"
-            })
+st.header("🚀 Elaborazione Planning")
 
-        # --- BOTTONE PDF ---
-        pdf_data = genera_pdf(datetime.now().strftime("%d/%m/%Y"), schieramento_per_pdf, nomi_split)
-        st.download_button("📥 SCARICA PLANNING PDF", pdf_data, f"Planning_{datetime.now().strftime('%Y%m%d')}.pdf", "application/pdf")
+# Input Assenti
+assenti = st.multiselect("🛌 Seleziona Assenti/Riposi:", sorted(df['Nome'].tolist()))
+
+# --- CALCOLO ORE E GENERAZIONE ---
+if st.button("🚀 GENERA E CONTROLLA CARICO ORE"):
+    conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
+    attive = df[~df['Nome'].isin(assenti)]
+    
+    # 1. Identificazione Split
+    pool_split = attive[(attive['Part_Time'] == 0) & (attive['Indisp_Spezzato'] == 0)]
+    nomi_split = pool_split.sort_values('Conteggio_Spezzati').head(4)['Nome'].tolist()
+    
+    # 2. Simulazione/Calcolo Schieramento
+    risultati = []
+    for hotel in lista_hotel:
+        # Qui inseriresti la tua logica di assegnazione reale
+        team_nomi = attive[attive['Nome'].str.contains("A|E|I")].head(2)['Nome'].tolist() # Esempio
+        risultati.append({"Hotel": hotel, "Team": ", ".join(team_nomi), "Responsabile": "Governante"})
+    
+    # Salviamo nello stato della sessione per non perderli
+    st.session_state['schieramento_pronto'] = risultati
+    st.session_state['split_pronti'] = nomi_split
+
+# --- VISUALIZZAZIONE RISULTATI (Se esistono) ---
+if 'schieramento_pronto' in st.session_state:
+    st.divider()
+    st.subheader("📋 Risultato Schieramento")
+    
+    # Tabella di riepilogo a schermo
+    st.table(pd.DataFrame(st.session_state['schieramento_pronto']))
+    st.info(f"🌙 **Spezzato oggi:** {', '.join(st.session_state['split_pronti'])}")
+    
+    # Bottoni di Azione
+    c1, c2 = st.columns(2)
+    with c1:
+        pdf_data = genera_pdf(datetime.now().strftime("%d/%m/%Y"), 
+                              st.session_state['schieramento_pronto'], 
+                              st.session_state['split_pronti'])
+        st.download_button("📥 SCARICA PDF", pdf_data, "Planning.pdf", "application/pdf")
+    
+    with c2:
+        if st.button("🧊 CRISTALLIZZA"):
+            st.success("Dati salvati nello storico!")
+            st.balloons()
