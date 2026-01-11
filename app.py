@@ -149,38 +149,89 @@ with t3:
 
     if st.button("🚀 GENERA SCHIERAMENTO"):
         conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
+        # Prendiamo TUTTE le cameriere disponibili (es. 65 meno i riposi)
         attive = df[(~df['Nome'].isin(assenti)) & (df['Ruolo'] == 'Cameriera')].copy()
+        
+        # 1. Identificazione Split (le 4 che devono fare il serale)
         pool_split = attive[(attive['Part_Time'] == 0) & (attive['Indisp_Spezzato'] == 0)].sort_values('Conteggio_Spezzati').head(4)['Nome'].tolist()
         
-        gia_assegnate, ris = pool_split.copy(), []
-        for inp in cur_inp:
-            t = conf_df[conf_df['Hotel'] == inp['Hotel']].iloc[0] if not conf_df.empty else {"Arr_Ind":60, "Fer_Ind":30}
-            ore_nec = (inp['AI']*t['Arr_Ind'] + inp['FI']*t['Fer_Ind'] + inp['COP']*(t['Fer_Ind']/3) + inp['BIA']*(t['Fer_Ind']/4)) / 60
-            if ore_nec > 0:
-                team = attive[(attive['Zone_Padronanza'].str.contains(inp['Hotel'])) & (~attive['Nome'].isin(gia_assegnate))].head(2)['Nome'].tolist()
-                gia_assegnate.extend(team)
-                ris.append({"Hotel": inp['Hotel'], "Team": ", ".join(team), "Ore Servono": round(ore_nec, 1)})
-        st.session_state['res'] = ris; st.session_state['spl'] = pool_split
+        # Inizializziamo chi è già occupato
+        gia_assegnate = []
+        # Nota: chi fa lo split lavora comunque 5h la mattina, le teniamo nel pool delle assegnabili
+        
+        ris = []
 
+        for inp in cur_inp:
+            # Recupero tempi standard
+            t = conf_df[conf_df['Hotel'] == inp['Hotel']].iloc[0] if not conf_df.empty else {"Arr_Ind":60, "Fer_Ind":30}
+            
+            # CALCOLO ORE TOTALI NECESSARIE PER L'HOTEL
+            ore_nec = (inp['AI']*t['Arr_Ind'] + inp['FI']*t['Fer_Ind'] + inp['COP']*(t['Fer_Ind']/3) + inp['BIA']*(t['Fer_Ind']/4)) / 60
+            
+            if ore_nec > 0:
+                team_hotel = []
+                ore_fornite_attuali = 0
+                
+                # Cerchiamo tra chi NON è ancora stato assegnato ad altri hotel
+                # Diamo priorità 1 a chi ha la padronanza di QUELL'hotel, priorità 2 agli altri
+                candidate = attive[~attive['Nome'].isin(gia_assegnate)].copy()
+                candidate['Priorita'] = candidate['Zone_Padronanza'].apply(lambda x: 0 if x == inp['Hotel'] else 1)
+                candidate = candidate.sort_values(['Priorita', 'Rating_Num'], ascending=[True, False])
+                
+                # AGGIUNGIAMO PERSONE (COPPIE) FINCHÉ LE ORE NON SONO COPERTE
+                for _, cam in candidate.iterrows():
+                    if ore_fornite_attuali < ore_nec:
+                        team_hotel.append(cam['Nome'])
+                        gia_assegnate.append(cam['Nome'])
+                        
+                        # Contributo orario individuale
+                        # Se è Part-Time o se è stata scelta per lo Split, lavora 5h. Altrimenti 7.5h.
+                        if cam['Part_Time'] == 1 or cam['Nome'] in pool_split:
+                            ore_fornite_attuali += 5.0
+                        else:
+                            ore_fornite_attuali += 7.5
+                    else:
+                        # Ore coperte, passiamo al prossimo hotel
+                        break
+                
+                ris.append({
+                    "Hotel": inp['Hotel'], 
+                    "Team": ", ".join(team_hotel), 
+                    "Ore Servono": round(ore_nec, 1),
+                    "Ore Fornite": round(ore_fornite_attuali, 1)
+                })
+        
+        st.session_state['res'] = ris
+        st.session_state['spl'] = pool_split
+        # Salviamo anche chi è avanzato (le "libere" che non sono state assegnate a nessun hotel)
+        st.session_state['rimaste_libere'] = list(set(attive['Nome'].tolist()) - set(gia_assegnate))
+
+    # Visualizzazione risultati con controllo manuale
     if 'res' in st.session_state:
-        st.divider()
-        final_team_list = []
-        attive_all = df[(~df['Nome'].isin(assenti)) & (df['Ruolo'] == 'Cameriera')]
+        st.write(f"### 📋 Schieramento Proposto ({len(lista_nomi) - len(assenti)} persone in turno)")
         
         for i, row in enumerate(st.session_state['res']):
-            # FIX KEYERROR: Usiamo get() per sicurezza
-            ore_nec_val = row.get('Ore Servono', 0)
-            with st.expander(f"📍 {row['Hotel']} (Serve: {ore_nec_val}h)"):
-                occupate_altrove = [n for idx, r in enumerate(st.session_state['res']) if idx != i for n in r['Team'].split(", ")]
-                libere = sorted(list(set(attive_all['Nome'].tolist()) - set(occupate_altrove) - set(st.session_state['spl'])))
+            with st.expander(f"📍 {row['Hotel']} - Servono {row['Ore Servono']}h"):
+                # Calcolo dinamico per la modifica manuale
+                current_team = [n.strip() for n in row['Team'].split(",") if n.strip()]
                 
-                edit_team = st.multiselect(f"Modifica Team {row['Hotel']}", libere + row['Team'].split(", "), default=[n for n in row['Team'].split(", ") if n], key=f"ms_{row['Hotel']}")
-                ore_f = sum([5.0 if (attive_all[attive_all['Nome'] == n].iloc[0]['Part_Time'] == 1) else 7.5 for n in edit_team])
+                # Mostriamo chi è assegnato e permettiamo di aggiungere chi è rimasto libero
+                opzioni = current_team + st.session_state.get('rimaste_libere', [])
+                nuovo_team = st.multiselect(f"Staff per {row['Hotel']}:", sorted(opzioni), default=current_team, key=f"edit_{i}")
                 
-                if ore_f < ore_nec_val: st.warning(f"Mancano {round(ore_nec_val-ore_f,1)}h")
-                else: st.success(f"Coperto! ({ore_f}h)")
-                final_team_list.append({"Hotel": row['Hotel'], "Team": ", ".join(edit_team)})
-
+                # Ricalcolo ore in tempo reale
+                ore_effettive = 0
+                for nome in nuovo_team:
+                    p_data = df[df['Nome'] == nome].iloc[0]
+                    if p_data['Part_Time'] == 1 or nome in st.session_state['spl']:
+                        ore_effettive += 5.0
+                    else:
+                        ore_effettive += 7.5
+                
+                if ore_effettive < row['Ore Servono']:
+                    st.error(f"Sotto-organico! Fornite: {ore_effettive}h / Richieste: {row['Ore Servono']}h")
+                else:
+                    st.success(f"Coperto! Fornite: {ore_effettive}h")
         if st.button("🧊 CRISTALLIZZA E SCARICA"):
             df.loc[df['Nome'].isin(assenti), 'Ultimo_Riposo'] = data_p.strftime("%Y-%m-%d")
             df.loc[df['Nome'].isin(st.session_state['spl']), 'Conteggio_Spezzati'] += 1
