@@ -114,6 +114,16 @@ with t3:
     st.header("🚀 Planning")
     data_p = st.date_input("Giorno:", datetime.now(), key="d_v_fin")
     assenti = st.multiselect("🛌 Assenti:", nomi_db, key="a_v_fin")
+    
+    # --- NUOVA INTESTAZIONE COLONNE ---
+    st.write("### Inserimento Carico Lavoro")
+    h_col = st.columns([2, 1, 1, 1, 1])
+    h_col[0].write("**Hotel**")
+    h_col[1].write("**AI** (Arr)")
+    h_col[2].write("**FI** (Fer)")
+    h_col[3].write("**COP**")
+    h_col[4].write("**BIA**")
+
     cur_inp = {}
     for h in lista_hotel:
         r = st.columns([2, 1, 1, 1, 1])
@@ -125,6 +135,29 @@ with t3:
             "BI": r[4].number_input("BIA", 0, 100, 0, key=f"v_bi_{h}", label_visibility="collapsed")
         }
 
+    if st.button("🚀 GENERA SCHIERAMENTO"):
+        conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
+        attive = df[~df['Nome'].isin(assenti)].copy()
+        
+        # Le prime 4 cameriere FT diventano lo "Spezzato" per le coperture
+        pool_spl = attive[attive['Ruolo'] == 'Cameriera'].head(4)['Nome'].tolist()
+        st.session_state['spl_v_fin'] = pool_spl
+
+        # ... (Logica di calcolo fabbisogno e assegnazione coppie/affinità che abbiamo già scritto) ...
+        # [Assicurati di mantenere qui il codice dell'ultima versione per l'assegnazione squadre]
+
+    # --- VISUALIZZAZIONE RISULTATI ---
+    if 'res_v_fin' in st.session_state:
+        # ... (Qui va il blocco del Bilancio Ore e degli Expander che abbiamo sistemato prima) ...
+        
+        # --- AGGIUNTA SQUADRA COPERTURE IN FONDO ---
+        st.divider()
+        st.subheader("🌙 Turno Serale (Coperture)")
+        chi_fa_coperture = st.session_state.get('spl_v_fin', [])
+        if chi_fa_coperture:
+            st.success(f"Le seguenti persone faranno il turno 19:00 - 22:00: **{', '.join(chi_fa_coperture)}**")
+        else:
+            st.warning("Nessuna persona assegnata alle coperture.")
     if st.button("🚀 GENERA SCHIERAMENTO"):
         conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
         attive = df[~df['Nome'].isin(assenti)].copy()
