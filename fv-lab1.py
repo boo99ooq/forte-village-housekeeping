@@ -184,38 +184,61 @@ with t3:
     if 'res_v_fin' in st.session_state:
         st.divider()
         
-        # 📋 TABELLA RIEPILOGO RISORSE
+        # 1. Recuperiamo lo stato attuale delle squadre dagli input (se già toccati)
+        # Usiamo un dizionario temporaneo per capire chi è assegnato DOVE
+        squadre_attuali = {}
+        tutti_assegnati_ora = []
+        
+        for i, r in enumerate(st.session_state['res_v_fin']):
+            key_ms = f"edt_f_{i}"
+            # Se l'utente ha già interagito con il multiselect, prendiamo quel valore
+            if key_ms in st.session_state:
+                nomi_scelti = st.session_state[key_ms]
+            else:
+                nomi_scelti = [n.strip() for n in r['Team'].split(",") if n.strip()]
+            
+            squadre_attuali[r['Hotel']] = nomi_scelti
+            tutti_assegnati_ora.extend(nomi_scelti)
+        
+        # 2. Calcoliamo chi è veramente libero in questo istante
+        tutte_attive = [n for n in nomi_db if n not in assenti]
+        vere_libere = sorted(list(set(tutte_attive) - set(tutti_assegnati_ora)))
+        
+        # 3. Riepilogo Risorse
         st.subheader("📋 Riepilogo Risorse")
-        libere = st.session_state.get('lib_v_fin', [])
-        
-        assegnate_nomi = []
-        for r in st.session_state['res_v_fin']:
-            nomi = [n.replace("⭐ ", "").replace(" (Gov.)", "").strip() for n in r['Team'].split(",")]
-            assegnate_nomi.extend(nomi)
-        
         c1, c2, c3 = st.columns(3)
-        c1.metric("Totale Personale Attivo", len(libere) + len(assegnate_nomi))
-        c2.metric("Personale Assegnato", len(assegnate_nomi))
-        c3.metric("Personale Libero (Panchina)", len(libere))
+        c1.metric("Totale Attive", len(tutte_attive))
+        c2.metric("Assegnate", len(tutti_assegnati_ora))
+        c3.metric("In Panchina", len(vere_libere))
 
-        if libere:
-            with st.expander("🏃 PERSONALE NON ASSEGNATO (DISPONIBILE)"):
-                st.write(", ".join(sorted(libere)))
-                st.info("💡 Puoi aggiungere queste persone agli hotel usando i menu a tendina qui sotto.")
-        else:
-            st.success("Tutte le cameriere sono state assegnate correttamente.")
+        with st.expander("🏃 PANCHINA (Personale disponibile)", expanded=True):
+            if vere_libere:
+                st.write(", ".join(vere_libere))
+            else:
+                st.write("*Tutte le cameriere sono occupate*")
 
-        # 📍 REGOLAZIONE FINE (Gli Expander degli Hotel)
+        # 4. Regolazione Squadre
         st.subheader("📍 Regolazione Squadre")
         final_list = []
-        for i, r in enumerate(st.session_state['res_v_fin']):
-            with st.expander(f"📍 {r['Hotel']} ({r['Ore']}h)"):
-                cur_t = [n.strip() for n in r['Team'].split(",")]
-                # Opzioni: nomi assegnati + tutti quelli rimasti liberi
-                opts = sorted(list(set(cur_t) | set(st.session_state['lib_v_fin'])))
-                edt = st.multiselect(f"Modifica Team {r['Hotel']}", opts, default=cur_t, key=f"edt_f_{i}")
-                final_list.append({"Hotel": r['Hotel'], "Team": ", ".join(edt)})
         
-        if st.button("🧊 SCARICA PDF FINALE"):
+        for i, r in enumerate(st.session_state['res_v_fin']):
+            with st.expander(f"📍 {r['Hotel']}"):
+                nomi_in_questo_hotel = squadre_attuali[r['Hotel']]
+                
+                # Le opzioni devono essere: chi è già qui + chi è in panchina
+                opzioni_dinamiche = sorted(list(set(nomi_in_questo_hotel) | set(vere_libere)))
+                
+                # Visualizziamo il multiselect
+                scelta = st.multiselect(
+                    f"Staff {r['Hotel']}", 
+                    options=opzioni_dinamiche, 
+                    default=nomi_in_questo_hotel, 
+                    key=f"edt_f_{i}"
+                )
+                final_list.append({"Hotel": r['Hotel'], "Team": ", ".join(scelta)})
+        
+        # 5. Bottone finale per il PDF che usa la 'final_list' aggiornata
+        st.divider()
+        if st.button("🧊 CONFERMA E SCARICA PDF FINALE"):
             pdf = genera_pdf(data_p.strftime("%d/%m/%Y"), final_list, st.session_state['spl_v_fin'], assenti)
-            st.download_button("📥 DOWNLOAD", pdf, f"Planning_{data_p}.pdf")
+            st.download_button("📥 CLICCA QUI PER IL DOWNLOAD", pdf, f"Planning_{data_p}.pdf")
