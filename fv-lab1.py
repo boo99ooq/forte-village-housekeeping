@@ -58,7 +58,7 @@ def genera_pdf(data_str, schieramento, split_list, lista_assenti):
 
     for res in final_ordered:
         if y < 100: p.showPage(); y = h-70
-        p.setFont("Helvetica-Bold", 12); p.drawString(50, y, f"ZONA: {res['Hotel'].upper()}")
+        p.setFont("Helvetica-Bold", 12); p.drawString(50, y, f"ZONA: {res['Hotel'].upper()} ({res.get('Bilancio', '')})")
         y -= 15; p.setFont("Helvetica", 10); p.drawString(60, y, f"Team: {res['Team']}")
         y -= 25
     y -= 20; p.line(50, y, 540, y)
@@ -153,19 +153,16 @@ with t3:
             for _, g in gov[mask_g].iterrows():
                 t_h.append(f"⭐ {g['Nome']} (Gov.)"); gia_a.add(g['Nome'])
             
-            # 2. CAMERIERE (CON LOGICA AFFINITÀ)
+            # 2. CAMERIERE (AFFINITÀ)
             if o_n > 0 or zona in ["Hotel Castello", "Hotel Castello 4 Piano"]:
                 cand = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
                 cand['Pr'] = cand['Zone_Padronanza'].apply(lambda x: 0 if zona.replace("Hotel ", "").lower() in str(x).lower() else 1)
                 cand = cand.sort_values(['Pr'], ascending=True)
-                
                 for _, p in cand.iterrows():
                     if p['Nome'] in gia_a: continue
                     if o_f < (o_n if o_n > 0 else 7.5):
                         t_h.append(p['Nome']); gia_a.add(p['Nome'])
                         o_f += 5.0 if (p.get('Part_Time', 0) == 1 or p['Nome'] in pool_spl) else 7.5
-                        
-                        # --- TIRA DENTRO COMPAGNA ---
                         c_pref = str(p.get('Lavora_Bene_Con', '')).strip()
                         if c_pref and c_pref in attive['Nome'].values and c_pref not in gia_a:
                             t_h.append(c_pref); gia_a.add(c_pref)
@@ -173,7 +170,7 @@ with t3:
                             o_f += 5.0 if (p_c.get('Part_Time', 0) == 1 or c_pref in pool_spl) else 7.5
                     else: break
             
-            # 3. PAREGGIAMENTO (PER COPPIE)
+            # 3. PAREGGIAMENTO
             if len(t_h) > 0 and len(t_h) % 2 != 0:
                 rest = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
                 if not rest.empty:
@@ -181,34 +178,49 @@ with t3:
                     rinf = rest.sort_values(['Pr'], ascending=True).iloc[0]
                     t_h.append(rinf['Nome']); gia_a.add(rinf['Nome'])
 
-            if t_h: ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Ore": round(o_n, 1)})
+            if t_h: ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Req": round(o_n, 1)})
         st.session_state['res_v_fin'] = ris; st.session_state['spl_v_fin'] = pool_spl
 
-    # --- RIEPILOGO E MODIFICA ---
     if 'res_v_fin' in st.session_state:
         st.divider()
         tutte_attive = set(n for n in nomi_db if n not in assenti)
-        tutti_scelti = set()
-        for i in range(len(st.session_state['res_v_fin'])):
-            val = st.session_state.get(f"edt_f_{i}", [])
-            tutti_scelti.update([n.replace("⭐ ", "").replace(" (Gov.)", "").strip() for n in val])
-        vere_libere = sorted(list(tutte_attive - tutti_scelti))
-
-        st.subheader("📋 Riepilogo")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Attive", len(tutte_attive)); c2.metric("Impegnate", len(tutti_scelti)); c3.metric("Libere", len(vere_libere))
-        with st.expander("🏃 PANCHINA", expanded=True): st.write(", ".join(vere_libere) if vere_libere else "Tutte assegnate.")
-
-        final_list = []
-        for i, r in enumerate(st.session_state['res_v_fin']):
-            with st.expander(f"📍 {r['Hotel']}"):
-                key = f"edt_f_{i}"
-                attuali = st.session_state.get(key, [n.strip() for n in r['Team'].split(",") if n.strip()])
-                opts = sorted(list(set(attuali) | set(vere_libere)))
-                if len(attuali) % 2 != 0: st.warning("⚠️ Squadra dispari.")
-                scelta = st.multiselect(f"Team {r['Hotel']}", opts, default=attuali, key=key)
-                final_list.append({"Hotel": r['Hotel'], "Team": ", ".join(scelta)})
         
+        # LOGICA CALCOLO BILANCIO DINAMICO
+        final_list = []
+        tutti_scelti = set()
+        
+        for i, r in enumerate(st.session_state['res_v_fin']):
+            key = f"edt_f_{i}"
+            attuali = st.session_state.get(key, [n.strip() for n in r['Team'].split(",") if n.strip()])
+            
+            # Calcolo ore coperte per questo hotel
+            ore_coperte = 0
+            for nome in attuali:
+                n_pulito = nome.replace("⭐ ", "").replace(" (Gov.)", "").strip()
+                if n_pulito in df['Nome'].values:
+                    p_data = df[df['Nome'] == n_pulito].iloc[0]
+                    # Governanti = 0 ore lavoro fisico (o 7.5 se vuoi contarle), qui contiamo solo cameriere
+                    if p_data['Ruolo'] == 'Cameriera':
+                        ore_coperte += 5.0 if (p_data.get('Part_Time', 0) == 1 or n_pulito in st.session_state['spl_v_fin']) else 7.5
+            
+            diff = round(ore_coperte - r['Req'], 1)
+            bilancio_str = f"✅ OK (+{diff}h)" if diff >= 0 else f"⚠️ SOTTO ({diff}h)"
+            
+            tutti_scelti.update([n.replace("⭐ ", "").replace(" (Gov.)", "").strip() for n in attuali])
+            
+            with st.expander(f"📍 {r['Hotel']} | Servono: {r['Req']}h | Coperti: {ore_coperte}h | {bilancio_str}"):
+                vere_libere = sorted(list(tutte_attive - tutti_scelti))
+                opts = sorted(list(set(attuali) | set(vere_libere)))
+                if len(attuali) % 2 != 0: st.warning("⚠️ Numero dispari.")
+                scelta = st.multiselect(f"Team {r['Hotel']}", opts, default=attuali, key=key)
+                final_list.append({"Hotel": r['Hotel'], "Team": ", ".join(scelta), "Bilancio": bilancio_str})
+
+        # Riepilogo finale
+        vere_libere_finali = sorted(list(tutte_attive - tutti_scelti))
+        st.sidebar.metric("Libere in Panchina", len(vere_libere_finali))
+        if vere_libere_finali:
+            st.info(f"🏃 IN PANCHINA: {', '.join(vere_libere_finali)}")
+
         if st.button("🧊 SCARICA PDF"):
             pdf = genera_pdf(data_p.strftime("%d/%m/%Y"), final_list, st.session_state['spl_v_fin'], assenti)
             st.download_button("📥 DOWNLOAD", pdf, f"Planning_{data_p}.pdf")
