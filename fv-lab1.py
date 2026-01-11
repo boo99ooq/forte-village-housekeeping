@@ -225,18 +225,12 @@ with t_plan:
         pool_spl = attive[attive['Ruolo'] == 'Cameriera'].head(4)['Nome'].tolist()
         st.session_state['spl_v_fin'] = pool_spl
         
-        # PULIZIA E CALCOLO
-        conf_df.columns = [str(c).strip().upper() for c in conf_df.columns]
-        fabb = {}
-        for h in lista_hotel:
-            m = conf_df[conf_df['HOTEL'] == h]
-            if not m.empty:
-                m_ai, m_fi = m.iloc[0]['AI'], m.iloc[0]['FI']
-                m_ag, m_fg = m.iloc[0]['AG'], m.iloc[0]['FG']
-            else: m_ai, m_fi, m_ag, m_fg = 60, 30, 45, 25
-            tot_f = cur_inp[h]["FI"] + cur_inp[h]["FG"]
-            fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["AG"]*m_ag + cur_inp[h]["FG"]*m_fg + tot_f*15) / 60
-        
+        # Forza la prima colonna a chiamarsi 'HOTEL' e pulisce le altre
+        if not conf_df.empty:
+            conf_df.columns = [str(c).strip().upper() for c in conf_df.columns]
+            # Se la prima colonna non si chiama HOTEL, la rinominiamo noi d'ufficio
+            if 'HOTEL' not in conf_df.columns:
+                conf_df.rename(columns={conf_df.columns[0]: 'HOTEL'}, inplace=True)        
         fabb["MACRO: PALME & GARDEN"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
         z_ord = ["Hotel Castello", "Hotel Castello 4 Piano", "MACRO: PALME & GARDEN"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
         
