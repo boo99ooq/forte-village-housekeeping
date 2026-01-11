@@ -15,8 +15,10 @@ except ImportError:
 st.set_page_config(page_title="Forte Village Housekeeping", layout="wide")
 
 # --- DATABASE E CONFIG ---
-FILE_STAFF = 'housekeeping_database.csv'
+# Usa il nome esatto del tuo file su GitHub
+FILE_STAFF = 'housekeeping_database.csv' 
 FILE_CONFIG = 'config_tempi.csv'
+
 lista_hotel = [
     "Hotel Castello", "Hotel Castello Garden", "Hotel Castello 4 Piano", 
     "Cala del Forte", "Le Dune", "Villa del Parco", "Hotel Pineta", 
@@ -29,7 +31,7 @@ def load_data():
             df = pd.read_csv(FILE_STAFF)
             df.columns = [c.strip() for c in df.columns]
             
-            # Paracadute per colonne mancanti
+            # Correzione automatica colonne
             if 'AutoPart_Time' in df.columns:
                 df = df.rename(columns={'AutoPart_Time': 'Auto'})
             
@@ -94,7 +96,7 @@ with st.sidebar:
     sel_nome = st.selectbox("Seleziona:", ["--- NUOVO ---"] + nomi_db)
     curr = df[df['Nome'] == sel_nome].iloc[0] if sel_nome != "--- NUOVO ---" else None
 
-    with st.form("form_v_finale"):
+    with st.form("form_finale"):
         f_n = st.text_input("Nome", value=str(curr['Nome']) if curr is not None else "")
         idx_r = 1 if curr is not None and "overnante" in str(curr['Ruolo']).lower() else 0
         f_r = st.selectbox("Ruolo", ["Cameriera", "Governante"], index=idx_r)
@@ -129,40 +131,49 @@ with t2:
     for h in lista_hotel:
         cols = st.columns([2,1,1])
         cols[0].write(f"**{h}**")
-        t_row = c_df[c_df['Hotel'] == h] if not c_df.empty else pd.DataFrame()
-        ai_val = int(t_row.iloc[0]['Arr_Ind']) if not t_row.empty else 60
-        fi_val = int(t_row.iloc[0]['Fer_Ind']) if not t_row.empty else 30
-        ai = cols[1].number_input("AI", 5, 120, ai_val, key=f"t_ai_{h}")
-        fi = cols[2].number_input("FI", 5, 120, fi_val, key=f"t_fi_{h}")
+        
+        m_ai, m_fi = 60, 30
+        if not c_df.empty and 'Hotel' in c_df.columns:
+            t_row = c_df[c_df['Hotel'] == h]
+            if not t_row.empty:
+                m_ai = int(t_row.iloc[0].get('Arr_Ind', 60))
+                m_fi = int(t_row.iloc[0].get('Fer_Ind', 30))
+        
+        ai = cols[1].number_input("AI", 5, 120, m_ai, key=f"t_ai_{h}")
+        fi = cols[2].number_input("FI", 5, 120, m_fi, key=f"t_fi_{h}")
         new_c.append({"Hotel": h, "Arr_Ind": ai, "Fer_Ind": fi})
     if st.button("💾 Salva Tempi"):
         pd.DataFrame(new_c).to_csv(FILE_CONFIG, index=False); st.success("Salvati!")
 
 with t3:
     st.header("🚀 Planning")
-    data_p = st.date_input("Giorno:", datetime.now(), key="date_v11")
-    assenti = st.multiselect("🛌 Assenti:", nomi_db, key="ass_v11")
+    data_p = st.date_input("Giorno:", datetime.now(), key="d_plan")
+    assenti = st.multiselect("🛌 Assenti:", nomi_db, key="a_plan")
     
     cur_inp = {}
     for h in lista_hotel:
         r = st.columns([2, 1, 1, 1, 1])
         r[0].write(f"**{h}**")
         cur_inp[h] = {
-            "AI": r[1].number_input("AI", 0, 100, 0, key=f"v11_ai_{h}", label_visibility="collapsed"),
-            "FI": r[2].number_input("FI", 0, 100, 0, key=f"v11_fi_{h}", label_visibility="collapsed"),
-            "CO": r[3].number_input("COP", 0, 100, 0, key=f"v11_co_{h}", label_visibility="collapsed"),
-            "BI": r[4].number_input("BIA", 0, 100, 0, key=f"v11_bi_{h}", label_visibility="collapsed")
+            "AI": r[1].number_input("AI", 0, 100, 0, key=f"v_ai_{h}", label_visibility="collapsed"),
+            "FI": r[2].number_input("FI", 0, 100, 0, key=f"v_fi_{h}", label_visibility="collapsed"),
+            "CO": r[3].number_input("COP", 0, 100, 0, key=f"v_co_{h}", label_visibility="collapsed"),
+            "BI": r[4].number_input("BIA", 0, 100, 0, key=f"v_bi_{h}", label_visibility="collapsed")
         }
 
-    if st.button("🚀 GENERA SCHIERAMENTO", key="gen_v11"):
+    if st.button("🚀 GENERA SCHIERAMENTO"):
         conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
         attive = df[~df['Nome'].isin(assenti)].copy()
         pool_spl = attive[attive['Ruolo'] == 'Cameriera'].head(4)['Nome'].tolist()
         
         fabb = {}
         for h in lista_hotel:
-            t_r = conf_df[conf_df['Hotel'] == h]
-            m_ai, m_fi = (t_r.iloc[0]['Arr_Ind'], t_r.iloc[0]['Fer_Ind']) if not t_r.empty else (60, 30)
+            m_ai, m_fi = 60, 30
+            if not conf_df.empty and 'Hotel' in conf_df.columns:
+                t_r = conf_df[conf_df['Hotel'] == h]
+                if not t_r.empty:
+                    m_ai = t_r.iloc[0].get('Arr_Ind', 60)
+                    m_fi = t_r.iloc[0].get('Fer_Ind', 30)
             fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["CO"]*(m_fi/3) + cur_inp[h]["BI"]*(m_fi/4)) / 60
         
         fabb["MACRO: PALME & GARDEN"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
@@ -188,17 +199,17 @@ with t3:
                         o_f += 5.0 if (is_pt == 1 or p['Nome'] in pool_spl) else 7.5
                     else: break
             if t_h: ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Ore": round(o_n, 1)})
-        st.session_state['res_v11'] = ris; st.session_state['spl_v11'] = pool_spl; st.session_state['lib_v11'] = list(set(attive[attive['Ruolo']=='Cameriera']['Nome']) - set(gia_a))
+        st.session_state['res_v_fin'] = ris; st.session_state['spl_v_fin'] = pool_spl; st.session_state['lib_v_fin'] = list(set(attive[attive['Ruolo']=='Cameriera']['Nome']) - set(gia_a))
 
-    if 'res_v11' in st.session_state:
+    if 'res_v_fin' in st.session_state:
         st.divider()
         final_list = []
-        for i, r in enumerate(st.session_state['res_v11']):
+        for i, r in enumerate(st.session_state['res_v_fin']):
             with st.expander(f"📍 {r['Hotel']} ({r['Ore']}h)"):
                 cur_t = [n.strip() for n in r['Team'].split(",")]
-                opts = sorted(list(set(cur_t) | set(st.session_state['lib_v11'])))
-                edt = st.multiselect(f"Team {r['Hotel']}", opts, default=cur_t, key=f"edt_v11_{i}")
+                opts = sorted(list(set(cur_t) | set(st.session_state['lib_v_fin'])))
+                edt = st.multiselect(f"Team {r['Hotel']}", opts, default=cur_t, key=f"edt_fin_{i}")
                 final_list.append({"Hotel": r['Hotel'], "Team": ", ".join(edt)})
         if st.button("🧊 SCARICA PDF"):
-            pdf = genera_pdf(data_p.strftime("%d/%m/%Y"), final_list, st.session_state['spl_v11'], assenti)
+            pdf = genera_pdf(data_p.strftime("%d/%m/%Y"), final_list, st.session_state['spl_v_fin'], assenti)
             st.download_button("📥 DOWNLOAD", pdf, f"Planning_{data_p}.pdf")
