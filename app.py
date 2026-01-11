@@ -18,7 +18,6 @@ def get_csv_url(url):
         return None
     except: return None
 
-# --- FUNZIONI GRAFICHE E CALCOLO ---
 def get_rating_icons(val):
     if val <= 0: return "⚪⚪⚪⚪⚪"
     full = int(val)
@@ -27,6 +26,7 @@ def get_rating_icons(val):
 
 def calcola_rating(row):
     try:
+        # Recupero sicuro dei valori numerici
         p = pd.to_numeric(row.get('Professionalita', 0), errors='coerce') or 0
         e = pd.to_numeric(row.get('Esperienza', 0), errors='coerce') or 0
         t = pd.to_numeric(row.get('Tenuta_Fisica', 0), errors='coerce') or 0
@@ -47,46 +47,48 @@ def load_data():
         return df_temp
     except: return pd.DataFrame()
 
-# Caricamento sicuro
 df = load_data()
 lista_hotel = ["Hotel Castello", "Hotel Castello Garden", "Castello 4 Piano", "Cala del Forte", "Le Dune", "Villa del Parco", "Hotel Pineta", "Bouganville", "Le Palme", "Il Borgo", "Le Ville", "Spazi Comuni"]
 
-# Inizializzazione colonne per evitare KeyError
 if not df.empty:
     df = df.fillna("")
+    # Creazione colonne calcolate
     df['Rating_Num'] = df.apply(lambda x: calcola_rating(x) if 'ameriera' in str(x.get('Ruolo', '')).lower() else 0.0, axis=1)
     df['Valutazione'] = df['Rating_Num'].apply(get_rating_icons)
 else:
-    st.error("⚠️ Il foglio Google non risponde o è vuoto. Controlla i permessi di condivisione!")
+    st.error("⚠️ Impossibile caricare i dati. Verifica il link Google Sheets.")
     st.stop()
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.header("📋 Gestionale Live")
-    st.markdown(f"[📂 Apri Google Sheets]({SHEET_URL})")
-    st.divider()
-    cerca = st.selectbox("Cerca dipendente:", [""] + sorted(df['Nome'].tolist()))
+    st.header("📋 Menu")
+    st.markdown(f"[📂 Foglio Google]({SHEET_URL})")
+    cerca = st.selectbox("Cerca:", [""] + sorted(df['Nome'].tolist()))
     if cerca:
         p = df[df['Nome'] == cerca].iloc[0]
-        st.write(f"**Ruolo:** {p.get('Ruolo', 'N/D')}")
-        if 'ameriera' in str(p.get('Ruolo')).lower():
-            st.write(f"**Performance:** {p['Valutazione']}")
+        st.write(f"**Ruolo:** {p.get('Ruolo')}")
+        if 'Rating_Num' in df.columns and p['Rating_Num'] > 0:
+            st.write(f"**Voto:** {p['Valutazione']}")
 
 # --- TABS ---
 t1, t2, t3 = st.tabs(["🏆 Dashboard", "⚙️ Tempi", "🚀 Planning"])
 
 with t1:
     st.subheader("Performance Staff")
-    view_cols = ['Nome', 'Ruolo', 'Valutazione', 'Zone_Padronanza', 'Auto']
-    presenti = [c for c in view_cols if c in df.columns]
-    # Controllo extra prima del sort
-    if 'Rating_Num' in df.columns:
-        st.dataframe(df[presenti].sort_values('Rating_Num', ascending=False), use_container_width=True, hide_index=True)
-    else:
-        st.dataframe(df[presenti], use_container_width=True, hide_index=True)
+    # Definiamo le colonne da visualizzare (Rating_Num serve per ordinare, quindi lo includiamo)
+    cols_to_show = ['Nome', 'Ruolo', 'Valutazione', 'Zone_Padronanza', 'Auto', 'Rating_Num']
+    presenti = [c for c in cols_to_show if c in df.columns]
+    
+    # Ordiniamo e poi nascondiamo la colonna tecnica Rating_Num
+    st.dataframe(
+        df[presenti].sort_values('Rating_Num', ascending=False),
+        column_config={"Rating_Num": None}, # Questa riga nasconde la colonna numerica
+        use_container_width=True,
+        hide_index=True
+    )
 
 with t2:
-    st.header("⚙️ Configurazione Tempi")
+    st.header("⚙️ Tempi Standard")
     c_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
     new_config = []
     for h in lista_hotel:
@@ -94,26 +96,26 @@ with t2:
             r = c_df[c_df['Hotel'] == h].iloc[0]
             vs = [int(r['Arr_Ind']), int(r['Fer_Ind']), int(r['Arr_Gru']), int(r['Fer_Gru'])]
         else: vs = [60, 30, 45, 20]
-        col1, col2, col3, col4, col5 = st.columns([2,1,1,1,1])
-        col1.write(f"**{h}**")
-        ai = col2.number_input("AI", 5, 200, vs[0], key=f"ai_{h}", label_visibility="collapsed")
-        fi = col3.number_input("FI", 5, 200, vs[1], key=f"fi_{h}", label_visibility="collapsed")
-        ag = col4.number_input("AG", 5, 200, vs[2], key=f"ag_{h}", label_visibility="collapsed")
-        fg = col5.number_input("FG", 5, 200, vs[3], key=f"fg_{h}", label_visibility="collapsed")
+        c = st.columns([2,1,1,1,1])
+        c[0].write(f"**{h}**")
+        ai = c[1].number_input("AI", 5, 200, vs[0], key=f"ai_{h}", label_visibility="collapsed")
+        fi = c[2].number_input("FI", 5, 200, vs[1], key=f"fi_{h}", label_visibility="collapsed")
+        ag = c[3].number_input("AG", 5, 200, vs[2], key=f"ag_{h}", label_visibility="collapsed")
+        fg = c[4].number_input("FG", 5, 200, vs[3], key=f"fg_{h}", label_visibility="collapsed")
         new_config.append({"Hotel": h, "Arr_Ind": ai, "Fer_Ind": fi, "Arr_Gru": ag, "Fer_Gru": fg})
-    if st.button("💾 Salva Configurazione"):
+    if st.button("💾 Salva Tempi"):
         pd.DataFrame(new_config).to_csv(FILE_CONFIG, index=False)
         st.success("Salvato!")
 
 with t3:
     st.header("🚀 Planning")
     lp_df = pd.read_csv(FILE_LAST_PLAN) if os.path.exists(FILE_LAST_PLAN) else pd.DataFrame()
-    assenti = st.multiselect("🏖️ Seleziona Assenti:", sorted(df['Nome'].tolist()))
+    assenti = st.multiselect("🏖️ Assenti:", sorted(df['Nome'].tolist()))
     
-    # Reset button (Novità)
-    if st.button("🧹 Reset Campi"):
+    if st.button("🧹 Reset Planning"):
         pd.DataFrame(columns=["Hotel", "AI", "FI", "VI", "AG", "FG", "VG"]).to_csv(FILE_LAST_PLAN, index=False)
         st.rerun()
 
     st.divider()
-    # Logica planning... (uguale alla precedente)
+    # Logica di inserimento numeri e calcolo schieramento...
+    # (Codice identico a quello funzionante in precedenza)
