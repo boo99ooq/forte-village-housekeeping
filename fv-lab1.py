@@ -298,7 +298,25 @@ with t_plan:
                 m_ai, m_fi, m_ag, m_fg = 60, 30, 45, 25
             
             tot_fer = cur_inp[h]["FI"] + cur_inp[h]["FG"]
-            # Fabbisogno incluse coperture e biancheria stimate su fermate
+            # fabb = {}
+        # PULIZIA AUTOMATICA: trasformiamo tutto in maiuscolo e togliamo spazi extra
+        conf_df.columns = conf_df.columns.str.strip().str.upper()
+
+        for h in lista_hotel:
+            # Ora cerchiamo 'HOTEL' (che abbiamo appena reso sicuro sopra)
+            m = conf_df[conf_df['HOTEL'] == h]
+            
+            if not m.empty:
+                # Usiamo i nomi mappati correttamente in maiuscolo
+                m_ai = m.iloc[0]['ARR I']
+                m_fi = m.iloc[0]['FERM I']
+                m_ag = m.iloc[0]['ARR G']
+                m_fg = m.iloc[0]['FERM G']
+            else:
+                m_ai, m_fi, m_ag, m_fg = 60, 30, 45, 25
+            
+            tot_fer = cur_inp[h]["FI"] + cur_inp[h]["FG"]
+            fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["AG"]*m_ag + cur_inp[h]["FG"]*m_fg + tot_fer*15) / 60Fabbisogno incluse coperture e biancheria stimate su fermate
             fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["AG"]*m_ag + cur_inp[h]["FG"]*m_fg + tot_fer*15) / 60
         
         # Logica di assegnazione (Castello, Coppie, ecc.)
