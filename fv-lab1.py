@@ -248,107 +248,107 @@ with t_tempi:
         st.markdown("---")
     
        if st.button("🚀 GENERA SCHIERAMENTO", use_container_width=True):
-        ris = [] 
-        conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
-        if not conf_df.empty:
-            conf_df.columns = [str(c).strip().upper() for c in conf_df.columns]
-        
-        attive_calc = df[~df['Nome'].isin(assenti)].copy()
-        
-        # --- DEFINIZIONE SPEZZATI (🌙) ---
-        # Prendiamo le prime 4 cameriere libere per lo spezzato
-        pool_spl = attive_calc[attive_calc['Ruolo'] == 'Cameriera']['Nome'].head(4).tolist()
-        st.session_state['spl_v_fin'] = pool_spl
-        
-        fabb = {}
-        for h in lista_hotel:
-            m = conf_df[conf_df['HOTEL'] == h.upper()] if not conf_df.empty else pd.DataFrame()
-            m_fi = m.iloc[0].get('FI', 30) if not m.empty else 30
-            m_ai = m.iloc[0].get('AI', 60) if not m.empty else 60
-            m_ag = m.iloc[0].get('AG', 45) if not m.empty else 45
-            m_fg = m.iloc[0].get('FG', 25) if not m.empty else 25
+            ris = [] 
+            conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
+            if not conf_df.empty:
+                conf_df.columns = [str(c).strip().upper() for c in conf_df.columns]
             
-            t_cop = (m_fi / 3) * cur_inp[h]["COP"]
-            t_bian = (m_fi / 4) * cur_inp[h]["BIAN"]
-            fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["AG"]*m_ag + cur_inp[h]["FG"]*m_fg + t_cop + t_bian) / 60
-
-        fabb["Palme & Garden"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
-        z_ord = ["Hotel Castello", "Hotel Castello 4 Piano", "Palme & Garden"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
-        
-        gia_a = set()
-        for zona in z_ord:
-            o_n, t_h, o_f = fabb.get(zona, 0), [], 0
+            attive_calc = df[~df['Nome'].isin(assenti)].copy()
             
-            # 1. GOVERNANTI (⭐)
-            gv_z = attive_calc[(attive_calc['Ruolo'] == 'Governante') & (~attive_calc['Nome'].isin(gia_a))]
-            mask_g = gv_z['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)
-            for _, g in gv_z[mask_g].iterrows():
-                t_h.append(f"⭐ {g['Nome']} (Gov.)")
-                gia_a.add(g['Nome'])
+            # --- DEFINIZIONE SPEZZATI (🌙) ---
+            # Prendiamo le prime 4 cameriere libere per lo spezzato
+            pool_spl = attive_calc[attive_calc['Ruolo'] == 'Cameriera']['Nome'].head(4).tolist()
+            st.session_state['spl_v_fin'] = pool_spl
             
-            # 2. CAMERIERE (🌙 e 🕒)
-            if o_n > 0 or zona in ["Hotel Castello", "Hotel Castello 4 Piano"]:
-                cand = attive_calc[(attive_calc['Ruolo'] == 'Cameriera') & (~attive_calc['Nome'].isin(gia_a))].copy()
-                for _, p in cand.iterrows():
-                    if p['Nome'] in gia_a: continue
-                    if o_f < (o_n if o_n > 0 else 7.5):
-                        # --- LOGICA ICONE FORZATA ---
-                        nome_c = p['Nome']
-                        is_pt = str(p.get('Part_Time', '0')) in ['1', '1.0', 'True']
-                        
-                        if nome_c in pool_spl:
-                            ico = "🌙 "
-                        elif is_pt:
-                            ico = "🕒 "
-                        else:
-                            ico = ""
-                        
-                        t_h.append(f"{ico}{nome_c}")
-                        gia_a.add(nome_c)
-                        o_f += 5.0 if (ico != "") else 7.5
-                    else: break
-            
-            if t_h:
-                n_gov = len([n for n in t_h if "⭐" in n])
-                n_cam = len(t_h) - n_gov
-                n_coppie = n_cam / 2
-                n_spl = len([n for n in t_h if "🌙" in n])
-                n_pt = len([n for n in t_h if "🕒" in n])
-                n_std = n_cam - n_spl - n_pt
+            fabb = {}
+            for h in lista_hotel:
+                m = conf_df[conf_df['HOTEL'] == h.upper()] if not conf_df.empty else pd.DataFrame()
+                m_fi = m.iloc[0].get('FI', 30) if not m.empty else 30
+                m_ai = m.iloc[0].get('AI', 60) if not m.empty else 60
+                m_ag = m.iloc[0].get('AG', 45) if not m.empty else 45
+                m_fg = m.iloc[0].get('FG', 25) if not m.empty else 25
                 
-                info = f"G:{n_gov} | Cam:{n_cam} (Coppie:{n_coppie}) | Std:{n_std} PT:{n_pt} 🌙:{n_spl}"
-                ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Req": round(o_n, 1), "Info": info})
-        
-        st.session_state['res_v_fin'] = ris
-        st.rerun()
-
-    if 'res_v_fin' in st.session_state:
-        st.divider()
-        attive_display = df[(df['Ruolo'] == 'Cameriera') & (~df['Nome'].isin(assenti))].copy()
-        assegnate_nomi = set()
-        for r in st.session_state['res_v_fin']:
-            nomi_puliti = [n.replace("⭐ ", "").replace(" (Gov.)", "").replace("🌙 ", "").replace("🕒 ", "").strip() for n in r['Team'].split(", ")]
-            assegnate_nomi.update(nomi_puliti)
-        
-        rimaste_df = attive_display[~attive_display['Nome'].isin(assegnate_nomi)]
-        rimaste_ico = []
-        for _, p in rimaste_df.iterrows():
-            is_pt_r = str(p.get('Part_Time', '0')) in ['1', '1.0', 'True']
-            ico_r = "🌙 " if p['Nome'] in st.session_state.get('spl_v_fin',[]) else ("🕒 " if is_pt_r else "")
-            rimaste_ico.append(f"{ico_r}{p['Nome']}")
-
-        c1, c2 = st.columns(2)
-        with c1:
-            st.warning(f"🛌 Disponibili/Non Assegnate ({len(rimaste_ico)})")
-            st.write(", ".join(rimaste_ico) if rimaste_ico else "Nessuna")
-        with c2:
-            st.error(f"🌙 Pool Spezzati ({len(st.session_state.get('spl_v_fin', []))})")
-            st.write(", ".join([f"🌙 {n}" for n in st.session_state.get('spl_v_fin', [])]))
-
-        st.divider()
-        for i, r in enumerate(st.session_state['res_v_fin']):
-            with st.expander(f"📍 {r['Hotel']} | {r['Info']} | {r['Req']}h"):
-                st.write(f"👥 **Team:** {r['Team']}")
-                # Nel menu (multiselect) usiamo nomi puliti per evitare errori di sistema
-                def_p = [n.replace("⭐ ", "").replace(" (Gov.)", "").replace("🌙 ", "").replace("🕒 ", "").strip() for n in r['Team'].split(", ")]
-                st.multiselect(f"Modifica {r['Hotel']}", nomi_db, default=def_p, key=f"e_{i}")
+                t_cop = (m_fi / 3) * cur_inp[h]["COP"]
+                t_bian = (m_fi / 4) * cur_inp[h]["BIAN"]
+                fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["AG"]*m_ag + cur_inp[h]["FG"]*m_fg + t_cop + t_bian) / 60
+    
+            fabb["Palme & Garden"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
+            z_ord = ["Hotel Castello", "Hotel Castello 4 Piano", "Palme & Garden"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
+            
+            gia_a = set()
+            for zona in z_ord:
+                o_n, t_h, o_f = fabb.get(zona, 0), [], 0
+                
+                # 1. GOVERNANTI (⭐)
+                gv_z = attive_calc[(attive_calc['Ruolo'] == 'Governante') & (~attive_calc['Nome'].isin(gia_a))]
+                mask_g = gv_z['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)
+                for _, g in gv_z[mask_g].iterrows():
+                    t_h.append(f"⭐ {g['Nome']} (Gov.)")
+                    gia_a.add(g['Nome'])
+                
+                # 2. CAMERIERE (🌙 e 🕒)
+                if o_n > 0 or zona in ["Hotel Castello", "Hotel Castello 4 Piano"]:
+                    cand = attive_calc[(attive_calc['Ruolo'] == 'Cameriera') & (~attive_calc['Nome'].isin(gia_a))].copy()
+                    for _, p in cand.iterrows():
+                        if p['Nome'] in gia_a: continue
+                        if o_f < (o_n if o_n > 0 else 7.5):
+                            # --- LOGICA ICONE FORZATA ---
+                            nome_c = p['Nome']
+                            is_pt = str(p.get('Part_Time', '0')) in ['1', '1.0', 'True']
+                            
+                            if nome_c in pool_spl:
+                                ico = "🌙 "
+                            elif is_pt:
+                                ico = "🕒 "
+                            else:
+                                ico = ""
+                            
+                            t_h.append(f"{ico}{nome_c}")
+                            gia_a.add(nome_c)
+                            o_f += 5.0 if (ico != "") else 7.5
+                        else: break
+                
+                if t_h:
+                    n_gov = len([n for n in t_h if "⭐" in n])
+                    n_cam = len(t_h) - n_gov
+                    n_coppie = n_cam / 2
+                    n_spl = len([n for n in t_h if "🌙" in n])
+                    n_pt = len([n for n in t_h if "🕒" in n])
+                    n_std = n_cam - n_spl - n_pt
+                    
+                    info = f"G:{n_gov} | Cam:{n_cam} (Coppie:{n_coppie}) | Std:{n_std} PT:{n_pt} 🌙:{n_spl}"
+                    ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Req": round(o_n, 1), "Info": info})
+            
+            st.session_state['res_v_fin'] = ris
+            st.rerun()
+    
+        if 'res_v_fin' in st.session_state:
+            st.divider()
+            attive_display = df[(df['Ruolo'] == 'Cameriera') & (~df['Nome'].isin(assenti))].copy()
+            assegnate_nomi = set()
+            for r in st.session_state['res_v_fin']:
+                nomi_puliti = [n.replace("⭐ ", "").replace(" (Gov.)", "").replace("🌙 ", "").replace("🕒 ", "").strip() for n in r['Team'].split(", ")]
+                assegnate_nomi.update(nomi_puliti)
+            
+            rimaste_df = attive_display[~attive_display['Nome'].isin(assegnate_nomi)]
+            rimaste_ico = []
+            for _, p in rimaste_df.iterrows():
+                is_pt_r = str(p.get('Part_Time', '0')) in ['1', '1.0', 'True']
+                ico_r = "🌙 " if p['Nome'] in st.session_state.get('spl_v_fin',[]) else ("🕒 " if is_pt_r else "")
+                rimaste_ico.append(f"{ico_r}{p['Nome']}")
+    
+            c1, c2 = st.columns(2)
+            with c1:
+                st.warning(f"🛌 Disponibili/Non Assegnate ({len(rimaste_ico)})")
+                st.write(", ".join(rimaste_ico) if rimaste_ico else "Nessuna")
+            with c2:
+                st.error(f"🌙 Pool Spezzati ({len(st.session_state.get('spl_v_fin', []))})")
+                st.write(", ".join([f"🌙 {n}" for n in st.session_state.get('spl_v_fin', [])]))
+    
+            st.divider()
+            for i, r in enumerate(st.session_state['res_v_fin']):
+                with st.expander(f"📍 {r['Hotel']} | {r['Info']} | {r['Req']}h"):
+                    st.write(f"👥 **Team:** {r['Team']}")
+                    # Nel menu (multiselect) usiamo nomi puliti per evitare errori di sistema
+                    def_p = [n.replace("⭐ ", "").replace(" (Gov.)", "").replace("🌙 ", "").replace("🕒 ", "").strip() for n in r['Team'].split(", ")]
+                    st.multiselect(f"Modifica {r['Hotel']}", nomi_db, default=def_p, key=f"e_{i}")
