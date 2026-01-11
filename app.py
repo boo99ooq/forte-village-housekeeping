@@ -81,7 +81,7 @@ with st.sidebar:
         f_pt = st.checkbox("🕒 Part-Time", value=bool(current['Part_Time']) if current is not None else False)
         f_ind = st.checkbox("🚫 No Spezzato", value=bool(current['Indisp_Spezzato']) if current is not None else False)
         f_auto = st.selectbox("Viaggia con...", ["Nessuno"] + [n for n in lista_nomi if n != f_nome])
-        f_zone = st.selectbox("Zona Padronanza", lista_hotel)
+        f_zone = st.selectbox("Zona Padronanza", lista_hotel, index=lista_hotel.index(str(current['Zone_Padronanza'])) if current is not None and str(current['Zone_Padronanza']) in lista_hotel else 0)
         st.write("**Valutazioni (1-10)**")
         v_pro = st.slider("Professionalità", 1, 10, int(current['Professionalita']) if current is not None else 5)
         v_esp = st.slider("Esperienza", 1, 10, int(current['Esperienza']) if current is not None else 5)
@@ -95,11 +95,6 @@ with st.sidebar:
 # --- TABS ---
 t1, t2, t3, t4 = st.tabs(["🏆 Dashboard", "⚙️ Tempi", "🚀 Planning", "📅 Storico"])
 
-with t1:
-    if not df.empty:
-        df[['Performance', 'Rating_Num']] = df.apply(lambda r: pd.Series(get_rating_bar(r)), axis=1)
-        st.dataframe(df[['Nome', 'Ruolo', 'Performance', 'Conteggio_Spezzati', 'Auto']], use_container_width=True, hide_index=True)
-
 with t2:
     st.header("⚙️ Configurazione Tempi Standard")
     c_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
@@ -107,32 +102,44 @@ with t2:
     for h in lista_hotel:
         cols = st.columns([2,1,1,1,1])
         cols[0].write(f"**{h}**")
-        ai = cols[1].number_input("AI", 5, 120, 60, key=f"t_ai_{h}")
-        fi = cols[2].number_input("FI", 5, 120, 30, key=f"t_fi_{h}")
+        ai = cols[1].number_input("AI (min)", 5, 120, 60, key=f"t_ai_{h}")
+        fi = cols[2].number_input("FI (min)", 5, 120, 30, key=f"t_fi_{h}")
         new_c.append({"Hotel": h, "Arr_Ind": ai, "Fer_Ind": fi, "Arr_Gru": 45, "Fer_Gru": 20})
     if st.button("💾 Salva Tempi"): pd.DataFrame(new_c).to_csv(FILE_CONFIG, index=False); st.success("Tempi Salvati!")
 
 with t3:
     st.header("🚀 Elaborazione Planning")
     data_p = st.date_input("Data:", datetime.now())
-    assenti = st.multiselect("🛌 Assenti:", lista_nomi)
+    assenti = st.multiselect("🛌 Assenti/Riposi:", lista_nomi)
     
-    st.write("### 📊 Carico Lavoro")
-    cur_inp = {h: {"AI": st.number_input(f"AI {h}", 0, 100, 0, key=f"ai_{h}"), "FI": st.number_input(f"FI {h}", 0, 100, 0, key=f"fi_{h}")} for h in lista_hotel}
+    st.write("### 📊 Inserimento Carico Lavoro")
+    cur_inp = {}
+    h_col = st.columns([2, 1, 1, 1, 1])
+    h_col[0].write("**Hotel**"); h_col[1].write("AI"); h_col[2].write("FI"); h_col[3].write("COP"); h_col[4].write("BIA")
+    
+    for h in lista_hotel:
+        row_c = st.columns([2, 1, 1, 1, 1])
+        row_c[0].write(f"**{h}**")
+        p_ai = row_c[1].number_input("", 0, 100, 0, key=f"ai_{h}", label_visibility="collapsed")
+        p_fi = row_c[2].number_input("", 0, 100, 0, key=f"fi_{h}", label_visibility="collapsed")
+        p_cop = row_c[3].number_input("", 0, 100, 0, key=f"cop_{h}", label_visibility="collapsed")
+        p_bia = row_c[4].number_input("", 0, 100, 0, key=f"bia_{h}", label_visibility="collapsed")
+        cur_inp[h] = {"AI": p_ai, "FI": p_fi, "COP": p_cop, "BIA": p_bia}
 
     if st.button("🚀 GENERA SCHIERAMENTO"):
         conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
         attive = df[(~df['Nome'].isin(assenti))].copy()
         
-        # 1. Spezzato
         pool_split = attive[(attive['Part_Time'] == 0) & (attive['Indisp_Spezzato'] == 0) & (attive['Ruolo'] == 'Cameriera')].sort_values('Conteggio_Spezzati').head(4)['Nome'].tolist()
         
-        # 2. Macro-Zona Palme+Garden
         def calc_ore(hotel_nome):
             t = conf_df[conf_df['Hotel'] == hotel_nome].iloc[0] if not conf_df.empty else {"Arr_Ind":60, "Fer_Ind":30}
-            return (cur_inp[hotel_nome]["AI"]*t["Arr_Ind"] + cur_inp[hotel_nome]["FI"]*t["Fer_Ind"]) / 60
+            base = (cur_inp[hotel_nome]["AI"]*t["Arr_Ind"] + cur_inp[hotel_nome]["FI"]*t["Fer_Ind"])
+            extra = (cur_inp[hotel_nome]["COP"]*(t["Fer_Ind"]/3) + cur_inp[hotel_nome]["BIA"]*(t["Fer_Ind"]/4))
+            return (base + extra) / 60
 
         fabbisogni = {h: calc_ore(h) for h in lista_hotel}
+        # Accorpamento logico Palme & Garden
         fabbisogni["MACRO: PALME & GARDEN"] = fabbisogni.get("Le Palme", 0) + fabbisogni.get("Hotel Castello Garden", 0)
         
         zone_lavoro = [h for h in lista_hotel if h not in ["Le Palme", "Hotel Castello Garden"]] + ["MACRO: PALME & GARDEN"]
@@ -151,24 +158,27 @@ with t3:
                         label = f"⭐ {p['Nome']} (Gov.)" if p['Ruolo'] == 'Governante' else p['Nome']
                         if p['Ruolo'] == 'Governante': team_h.insert(0, label)
                         else:
-                            team_h.append(label)
-                            ore_f += 5.0 if (p['Part_Time'] == 1 or p['Nome'] in pool_split) else 7.5
+                            team_h.append(label); ore_f += 5.0 if (p['Part_Time'] == 1 or p['Nome'] in pool_split) else 7.5
                         gia_ass.append(p['Nome'])
                     if ore_f >= ore_nec and any("(Gov.)" in n for n in team_h): break
                 ris.append({"Hotel": zona, "Team": ", ".join(team_h), "Ore Nec": round(ore_nec, 1)})
-        
         st.session_state['res'] = ris; st.session_state['spl'] = pool_split; st.session_state['libere'] = list(set(attive[attive['Ruolo']=='Cameriera']['Nome']) - set(gia_ass))
 
     if 'res' in st.session_state:
+        st.divider()
         final_list = []
         for i, r in enumerate(st.session_state['res']):
             with st.expander(f"📍 {r['Hotel']} (Fabbisogno: {r['Ore Nec']}h)"):
-                # Multiselect per bilanciare le 65 persone
                 current_t = [n.strip() for n in r['Team'].split(",")]
                 opzioni = sorted(list(set(current_t) | set(st.session_state['libere'])))
                 edit_t = st.multiselect(f"Team {r['Hotel']}", opzioni, default=current_t, key=f"ed_{i}")
+                
+                # Ricalcolo ore dinamico nel multiselect
+                ore_check = sum([5.0 if (df[df['Nome']==n.replace('⭐ ','').replace(' (Gov.)','')].iloc[0]['Part_Time']==1 or n.replace('⭐ ','').replace(' (Gov.)','') in st.session_state['spl']) else 7.5 for n in edit_t if '(Gov.)' not in n])
+                if ore_check < r['Ore Nec']: st.warning(f"Sotto-organico: {round(ore_check,1)}h / {r['Ore Nec']}h")
+                else: st.success(f"Copertura OK: {round(ore_check,1)}h")
                 final_list.append({"Hotel": r['Hotel'], "Team": ", ".join(edit_t)})
         
-        if st.button("🧊 SALVA E SCARICA"):
+        if st.button("🧊 SALVA E SCARICA PDF"):
             pdf = genera_pdf(data_p.strftime("%d/%m/%Y"), final_list, st.session_state['spl'], assenti)
             st.download_button("📥 SCARICA PDF", pdf, "Planning.pdf", "application/pdf")
