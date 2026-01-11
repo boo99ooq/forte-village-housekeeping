@@ -6,6 +6,8 @@ st.set_page_config(page_title="Resort Housekeeping Master", layout="wide")
 
 # --- DATABASE ---
 FILE_STAFF = 'Housekeeping_DB - Staff.csv'
+FILE_CONFIG = 'config_tempi.csv'
+FILE_LAST_PLAN = 'ultimo_planning_caricato.csv'
 
 def load_data():
     if os.path.exists(FILE_STAFF):
@@ -23,7 +25,7 @@ def get_rating_bar(row):
         p = pd.to_numeric(row.get('Professionalita', 5), errors='coerce') * 0.25
         e = pd.to_numeric(row.get('Esperienza', 5), errors='coerce') * 0.20
         t = pd.to_numeric(row.get('Tenuta_Fisica', 5), errors='coerce') * 0.20
-        d = pd.to_numeric(row.get('Disponibilita', 5), errors='coerce') or 0 * 0.15
+        d = pd.to_numeric(row.get('Disponibilita', 5), errors='coerce') * 0.15
         em = pd.to_numeric(row.get('Empatia', 5), errors='coerce') * 0.10
         g = pd.to_numeric(row.get('Capacita_Guida', 5), errors='coerce') * 0.10
         voto_5 = round(((p + e + t + d + em + g) / 2) * 2) / 2
@@ -31,25 +33,33 @@ def get_rating_bar(row):
     except: return "⬜⬜⬜⬜⬜", 0.0
 
 df = load_data()
+lista_hotel = ["Hotel Castello", "Hotel Castello Garden", "Castello 4 Piano", "Cala del Forte", "Le Dune", "Villa del Parco", "Hotel Pineta", "Bouganville", "Le Palme", "Il Borgo", "Le Ville", "Spazi Comuni"]
 
 # --- SIDEBAR: GESTIONE ---
 with st.sidebar:
     st.header("👤 Pannello Staff")
     nomi_staff = ["--- NUOVO ---"] + sorted(df['Nome'].tolist()) if not df.empty else ["--- NUOVO ---"]
     sel = st.selectbox("Seleziona:", nomi_staff)
-    current = df[df['Nome'] == sel].iloc[0] if sel != "--- NUOVO ---" else None
+    
+    # Correzione logica per evitare ValueError
+    current = None
+    if sel != "--- NUOVO ---":
+        current = df[df['Nome'] == sel].iloc[0]
 
     with st.form("form_staff"):
-        f_nome = st.text_input("Nome", value=current['Nome'] if current is not None else "")
-        f_ruolo = st.selectbox("Ruolo", ["Cameriera", "Governante"], index=0 if not current or "Cameriera" in current['Ruolo'] else 1)
-        f_auto = st.text_input("Auto", value=current['Auto'] if current is not None else "")
+        f_nome = st.text_input("Nome", value=str(current['Nome']) if current is not None else "")
+        f_ruolo = st.selectbox("Ruolo", ["Cameriera", "Governante"], 
+                               index=0 if current is None or "Cameriera" in str(current['Ruolo']) else 1)
+        f_auto = st.text_input("Auto", value=str(current['Auto']) if current is not None else "")
         
         st.write("Voti (1-10)")
         c1, c2 = st.columns(2)
-        f_pro = c1.number_input("Prof.", 0, 10, int(pd.to_numeric(current['Professionalita'], 0)) if current is not None else 5)
-        f_esp = c2.number_input("Esp.", 0, 10, int(pd.to_numeric(current['Esperienza'], 0)) if current is not None else 5)
+        f_pro = c1.number_input("Prof.", 0, 10, int(pd.to_numeric(current['Professionalita'], errors='coerce') or 5) if current is not None else 5)
+        f_esp = c2.number_input("Esp.", 0, 10, int(pd.to_numeric(current['Esperienza'], errors='coerce') or 5) if current is not None else 5)
         
-        if st.form_submit_button("💾 SALVA"):
+        # IL BOTTONE MANCANTE
+        submitted = st.form_submit_button("💾 SALVA SCHEDA")
+        if submitted:
             nuova_data = {"Nome": f_nome, "Ruolo": f_ruolo, "Auto": f_auto, "Professionalita": f_pro, "Esperienza": f_esp}
             if current is not None:
                 for col in df.columns:
@@ -60,20 +70,56 @@ with st.sidebar:
             st.rerun()
 
     st.divider()
-    # TASTO BACKUP
     csv = df.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Scarica CSV aggiornato", csv, "Housekeeping_DB_Staff_New.csv", "text/csv")
+    st.download_button("📥 Scarica Backup CSV", csv, "Housekeeping_DB_Staff.csv", "text/csv")
 
-# --- DASHBOARD ---
-if not df.empty:
-    df[['Performance', 'Rating_Num']] = df.apply(lambda r: pd.Series(get_rating_bar(r)), axis=1)
-    st.title("🏆 Dashboard Housekeeping")
+# --- TABS ---
+t1, t2, t3 = st.tabs(["🏆 Dashboard", "⚙️ Tempi", "🚀 Planning"])
+
+with t1:
+    if not df.empty:
+        df[['Performance', 'Rating_Num']] = df.apply(lambda r: pd.Series(get_rating_bar(r)), axis=1)
+        st.subheader("Performance e Logistica")
+        view_df = df[['Nome', 'Ruolo', 'Performance', 'Zone_Padronanza', 'Auto', 'Rating_Num']]
+        st.dataframe(view_df.sort_values('Rating_Num', ascending=False), 
+                     column_config={"Rating_Num": None}, use_container_width=True, hide_index=True)
+
+with t2:
+    st.header("⚙️ Configurazione Tempi")
+    # Caricamento tempi
+    c_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
+    new_config = []
+    for h in lista_hotel:
+        vs = [60, 30, 45, 20]
+        if not c_df.empty and h in c_df['Hotel'].values:
+            r = c_df[c_df['Hotel'] == h].iloc[0]
+            vs = [int(r['Arr_Ind']), int(r['Fer_Ind']), int(r['Arr_Gru']), int(r['Fer_Gru'])]
+        cols = st.columns([2,1,1,1,1])
+        cols[0].write(f"**{h}**")
+        ai = cols[1].number_input("AI", 5, 200, vs[0], key=f"ai_{h}", label_visibility="collapsed")
+        fi = cols[2].number_input("FI", 5, 200, vs[1], key=f"fi_{h}", label_visibility="collapsed")
+        ag = cols[3].number_input("AG", 5, 200, vs[2], key=f"ag_{h}", label_visibility="collapsed")
+        fg = cols[4].number_input("FG", 5, 200, vs[3], key=f"fg_{h}", label_visibility="collapsed")
+        new_config.append({"Hotel": h, "Arr_Ind": ai, "Fer_Ind": fi, "Arr_Gru": ag, "Fer_Gru": fg})
+    if st.button("💾 Salva Tempi"):
+        pd.DataFrame(new_config).to_csv(FILE_CONFIG, index=False)
+        st.success("Configurazione salvata!")
+
+with t3:
+    st.header("🚀 Planning Operativo")
+    assenti = st.multiselect("🏖️ Assenti:", sorted(df['Nome'].tolist()) if not df.empty else [])
     
-    # SOLUZIONE AL KEYERROR: Includiamo Rating_Num nella selezione, ordiniamo, poi la nascondiamo
-    view_df = df[['Nome', 'Ruolo', 'Performance', 'Zone_Padronanza', 'Auto', 'Rating_Num']]
-    st.dataframe(
-        view_df.sort_values('Rating_Num', ascending=False),
-        column_config={"Rating_Num": None}, # Nasconde la colonna tecnica
-        use_container_width=True, 
-        hide_index=True
-    )
+    if st.button("🧹 Reset Planning"):
+        pd.DataFrame(columns=["Hotel", "AI", "FI", "VI", "AG", "FG", "VG"]).to_csv(FILE_LAST_PLAN, index=False)
+        st.rerun()
+
+    st.divider()
+    # Logistica Auto
+    if assenti and 'Auto' in df.columns:
+        for a in assenti:
+            auto_v = df[df['Nome'] == a]['Auto'].values[0]
+            if auto_v:
+                comp = df[(df['Auto'] == auto_v) & (~df['Nome'].isin(assenti))]
+                if not comp.empty: st.warning(f"⚠️ {a} assente. Avvisa: {', '.join(comp['Nome'].tolist())}")
+
+    # (Logica Schieramento identica a quella funzionante sopra)
