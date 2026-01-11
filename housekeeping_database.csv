@@ -1,4 +1,4 @@
-Nome,Ruolo,Professionalita,Esperienza,Capacita_Guida,Tenuta_Fisica,Disponibilita,Empatia,Pendolare,Turno_Spezzato,Jolly,Riposo_Preferenziale,Zone_Padronanza,Lavora_Bene_Con,Non_Assegnare_A,Ultima_Modifica
+Nome,Ruolo,Professionalita,Esperienza,Capacita_Guida,Tenuta_Fisica,Disponibilita,Empatia,Pendolare,Turno_Spezzato,Jolly,Riposo_Preferenziale,Zone_Padronanza,Lavora_Bene_Con,Non_Assegnare_A,AutoPart_Time,Ultima_Modifica
 Clarimunda,Cameriera,8,7.0,6.0,9.0,10.0,7.0,1.0,1.0,1.0,Nessuna,Hotel Castello,Amaryllis,Nessuna,
 Doralice,Cameriera,7,6.0,5.0,10.0,9.0,8.0,1.0,0.0,0.0,Martedì,Le Dune,Nessuna,Clarimunda,
 Euphemia,Cameriera,9,8.0,7.0,8.0,6.0,10.0,0.0,1.0,0.0,Nessuna,Villa del Parco,Belphoebe,Nessuna,
