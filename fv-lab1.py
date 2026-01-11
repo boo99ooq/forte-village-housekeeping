@@ -303,12 +303,27 @@ with t_plan:
         st.session_state['res_v_fin'] = ris
         st.rerun()
     if 'res_v_fin' in st.session_state:
-        st.divider(); final_l = []
+        st.divider()
+        final_l = []
         spl = st.session_state.get('spl_v_fin', [])
+        
         for i, r in enumerate(st.session_state['res_v_fin']):
             with st.expander(f"📍 {r['Hotel']} (Req: {r['Req']}h)"):
-                s = st.multiselect(f"Team {r['Hotel']}", nomi_db, default=[n.replace("⭐ ", "").replace(" (Gov.)", "").strip() for n in r['Team'].split(",")], key=f"e_{i}")
+                # Puliamo i nomi dalle icone per farli combaciare con nomi_db
+                default_puliti = [
+                    n.replace("⭐ ", "").replace(" (Gov.)", "").replace("🌙 ", "").replace("🕒 ", "").strip() 
+                    for n in r['Team'].split(",")
+                ]
+                
+                # Il multiselect ora troverà i nomi corretti in nomi_db
+                s = st.multiselect(
+                    f"Team {r['Hotel']}", 
+                    nomi_db, 
+                    default=default_puliti, 
+                    key=f"e_{i}"
+                )
                 final_l.append({"Hotel": r['Hotel'], "Team": ", ".join(s)})
+        
         if st.button("🧊 SCARICA PDF"):
             pdf = genera_pdf_planning(data_p_str, final_l, spl, assenti)
             st.download_button("📥 DOWNLOAD", pdf, f"Planning_{data_p}.pdf")
