@@ -150,6 +150,8 @@ with t3:
     if st.button("🚀 GENERA SCHIERAMENTO"):
         conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
         attive = df[(~df['Nome'].isin(assenti))].copy()
+        
+        # 1. Identificazione Spezzati (solo cameriere)
         pool_split = attive[(attive['Part_Time'] == 0) & (attive['Indisp_Spezzato'] == 0) & (attive['Ruolo'] == 'Cameriera')].sort_values('Conteggio_Spezzati').head(4)['Nome'].tolist()
         
         def calc_ore(hotel_nome):
@@ -164,25 +166,45 @@ with t3:
         zone_lavoro = [h for h in lista_hotel if h not in ["Le Palme", "Hotel Castello Garden"]] + ["MACRO: PALME & GARDEN"]
         
         gia_ass, ris = [], []
+        
         for zona in zone_lavoro:
             ore_nec = fabbisogni.get(zona, 0)
+            
+            # Se l'hotel ha bisogno di lavoro, cerchiamo il team
             if ore_nec > 0:
                 team_h, ore_f = [], 0
-                cand = attive[~attive['Nome'].isin(gia_ass)].copy()
+                
+                # --- ASSEGNAZIONE GOVERNANTE SPECIFICA ---
+                # Cerchiamo solo governanti che hanno QUESTA zona come padronanza
+                gov_zona = attive[
+                    (attive['Ruolo'] == 'Governante') & 
+                    (~attive['Nome'].isin(gia_ass)) & 
+                    (attive['Zone_Padronanza'].apply(lambda x: x == zona or (zona == "MACRO: PALME & GARDEN" and x in ["Le Palme", "Hotel Castello Garden"])))
+                ]
+                
+                for _, g in gov_zona.iterrows():
+                    team_h.append(f"⭐ {g['Nome']} (Gov.)")
+                    gia_ass.append(g['Nome'])
+
+                # --- ASSEGNAZIONE CAMERIERE ---
+                cand = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_ass))].copy()
+                # Priorità padronanza
                 cand['Priorita'] = cand['Zone_Padronanza'].apply(lambda x: 0 if (x == zona or (zona == "MACRO: PALME & GARDEN" and x in ["Le Palme", "Hotel Castello Garden"])) else 1)
                 cand = cand.sort_values(['Priorita', 'Rating_Num'], ascending=[True, False])
                 
                 for _, p in cand.iterrows():
-                    if ore_f < ore_nec or (p['Ruolo'] == 'Governante' and not any("(Gov.)" in n for n in team_h)):
-                        label = f"⭐ {p['Nome']} (Gov.)" if p['Ruolo'] == 'Governante' else p['Nome']
-                        if p['Ruolo'] == 'Governante': team_h.insert(0, label)
-                        else:
-                            team_h.append(label); ore_f += 5.0 if (p['Part_Time'] == 1 or p['Nome'] in pool_split) else 7.5
+                    if ore_f < ore_nec:
+                        team_h.append(p['Nome'])
                         gia_ass.append(p['Nome'])
-                    if ore_f >= ore_nec and any("(Gov.)" in n for n in team_h): break
+                        ore_f += 5.0 if (p['Part_Time'] == 1 or p['Nome'] in pool_split) else 7.5
+                    else:
+                        break
+                
                 ris.append({"Hotel": zona, "Team": ", ".join(team_h), "Ore Nec": round(ore_nec, 1)})
-        st.session_state['res'] = ris; st.session_state['spl'] = pool_split; st.session_state['libere'] = list(set(attive[attive['Ruolo']=='Cameriera']['Nome']) - set(gia_ass))
-
+        
+        st.session_state['res'] = ris
+        st.session_state['spl'] = pool_split
+        st.session_state['libere'] = list(set(attive[attive['Ruolo']=='Cameriera']['Nome']) - set(gia_ass))
     if 'res' in st.session_state:
         st.divider()
         final_list = []
