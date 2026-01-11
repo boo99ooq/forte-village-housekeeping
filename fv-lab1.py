@@ -181,24 +181,40 @@ with t_staff:
             st.download_button(f"📥 Scarica {curr['Nome']}", pdf_s, f"Scheda_{curr['Nome']}.pdf")
 
 with t_tempi:
-    st.header("⚙️ Tempi Standard")
-    st.info("**Legenda:** AI = Arrivo Istat | FI = Fermata Istat | AG = Arrivo Grande | FG = Fermata Grande | +15 min per Copertura Biancheria (automatico)")
+    st.header("⚙️ Tempi Standard (Minuti)")
+    st.info("**Legenda:** ARR I: Arrivi Ind. | FERM I: Fermate Ind. | ARR G: Arrivi Gruppo | FERM G: Fermate Gruppo")
+    st.caption("Nota: Coperture (1/3 fermata) e Cambio Biancheria (1/4 fermata) sono calcolati automaticamente.")
+    
     c_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
     new_c = []
+    
+    # Intestazioni colonne
+    h_cols = st.columns([2, 1, 1, 1, 1])
+    h_cols[0].write("**ALBERGO**")
+    h_cols[1].write("**ARR I**")
+    h_cols[2].write("**FERM I**")
+    h_cols[3].write("**ARR G**")
+    h_cols[4].write("**FERM G**")
+
     for h in lista_hotel:
         r = st.columns([2, 1, 1, 1, 1])
         r[0].write(f"**{h}**")
         m_ai, m_fi, m_ag, m_fg = 60, 30, 45, 25
         if not c_df.empty:
-            tr = c_df[c_df['Hotel'] == h]
-            if not tr.empty: m_ai, m_fi, m_ag, m_fg = tr.iloc[0].get('AI', 60), tr.iloc[0].get('FI', 30), tr.iloc[0].get('AG', 45), tr.iloc[0].get('FG', 25)
-        v_ai = r[1].number_input("AI", 5, 120, m_ai, key=f"t_ai_{h}", label_visibility="collapsed")
-        v_fi = r[2].number_input("FI", 5, 120, m_fi, key=f"t_fi_{h}", label_visibility="collapsed")
-        v_ag = r[3].number_input("AG", 5, 120, m_ag, key=f"t_ag_{h}", label_visibility="collapsed")
-        v_fg = r[4].number_input("FG", 5, 120, m_fg, key=f"t_fg_{h}", label_visibility="collapsed")
-        new_c.append({"Hotel": h, "AI": v_ai, "FI": v_fi, "AG": v_ag, "FG": v_fg})
-    if st.button("💾 Salva Tempi"): pd.DataFrame(new_c).to_csv(FILE_CONFIG, index=False); st.success("Salvati!")
-
+            tr = c_df[c_df['HOTEL'] == h.upper()] if 'HOTEL' in c_df.columns else c_df[c_df.iloc[:,0] == h]
+            if not tr.empty:
+                m_ai = tr.iloc[0].get('AI', 60); m_fi = tr.iloc[0].get('FI', 30)
+                m_ag = tr.iloc[0].get('AG', 45); m_fg = tr.iloc[0].get('FG', 25)
+        
+        v_ai = r[1].number_input("AI", 5, 120, int(m_ai), key=f"t_ai_{h}", label_visibility="collapsed")
+        v_fi = r[2].number_input("FI", 5, 120, int(m_fi), key=f"t_fi_{h}", label_visibility="collapsed")
+        v_ag = r[3].number_input("AG", 5, 120, int(m_ag), key=f"t_ag_{h}", label_visibility="collapsed")
+        v_fg = r[4].number_input("FG", 5, 120, int(m_fg), key=f"t_fg_{h}", label_visibility="collapsed")
+        new_c.append({"HOTEL": h.upper(), "AI": v_ai, "FI": v_fi, "AG": v_ag, "FG": v_fg})
+    
+    if st.button("💾 Salva Tempi"):
+        pd.DataFrame(new_c).to_csv(FILE_CONFIG, index=False)
+        st.success("Tempi salvati correttamente!")
 with t_plan:
     st.header("🚀 Generazione Planning")
     c_d, c_a = st.columns([1, 2])
