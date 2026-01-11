@@ -226,7 +226,7 @@ with t_plan:
         st.session_state['spl_v_fin'] = pool_spl
         
         # PULIZIA E CALCOLO
-        conf_df.columns = conf_df.columns.str.strip().str.upper()
+        conf_df.columns = [str(c).strip().upper() for c in conf_df.columns]
         fabb = {}
         for h in lista_hotel:
             m = conf_df[conf_df['HOTEL'] == h]
