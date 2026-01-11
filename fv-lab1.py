@@ -110,22 +110,35 @@ with t3:
     
     st.divider()
     st.write("### 📊 Carico Lavoro")
-    h_col = st.columns([2.5, 1, 1, 1, 1])
-    h_col[0].write("**HOTEL**"); h_col[1].write("**AI**"); h_col[2].write("**FI**"); h_col[3].write("**COP**"); h_col[4].write("**BIA**")
+    
+    # --- NUOVA INTESTAZIONE A 6 CASELLE ---
+    h_col = st.columns([2, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8])
+    h_col[0].write("**HOTEL**")
+    h_col[1].write("**Arr I**")
+    h_col[2].write("**Ferm I**")
+    h_col[3].write("**Arr G**")
+    h_col[4].write("**Ferm G**")
+    h_col[5].write("**Cop**")
+    h_col[6].write("**Bian**")
 
     cur_inp = {}
     for h in lista_hotel:
-        r = st.columns([2.5, 1, 1, 1, 1])
+        r = st.columns([2, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8])
         r[0].write(f"**{h}**")
         v_ai = r[1].number_input("AI", 0, 100, 0, key=f"v_ai_{h}", label_visibility="collapsed")
         v_fi = r[2].number_input("FI", 0, 100, 0, key=f"v_fi_{h}", label_visibility="collapsed")
-        v_co = r[3].number_input("COP", 0, 100, 0, key=f"v_co_{h}", label_visibility="collapsed")
-        v_bi = r[4].number_input("BIA", 0, 100, 0, key=f"v_bi_{h}", label_visibility="collapsed")
-        cur_inp[h] = {"AI": v_ai, "FI": v_fi, "CO": v_co, "BI": v_bi}
+        v_ag = r[3].number_input("AG", 0, 100, 0, key=f"v_ag_{h}", label_visibility="collapsed")
+        v_fg = r[4].number_input("FG", 0, 100, 0, key=f"v_fg_{h}", label_visibility="collapsed")
+        v_co = r[5].number_input("COP", 0, 100, 0, key=f"v_co_{h}", label_visibility="collapsed")
+        v_bi = r[6].number_input("BIA", 0, 100, 0, key=f"v_bi_{h}", label_visibility="collapsed")
+        
+        cur_inp[h] = {"AI": v_ai, "FI": v_fi, "AG": v_ag, "FG": v_fg, "CO": v_co, "BI": v_bi}
 
     if st.button("🚀 GENERA SCHIERAMENTO", use_container_width=True):
         conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
         attive = df[~df['Nome'].isin(assenti)].copy()
+        
+        # Spezzati
         pool_spl = attive[attive['Ruolo'] == 'Cameriera'].head(4)['Nome'].tolist()
         st.session_state['spl_v_fin'] = pool_spl
         
@@ -134,9 +147,18 @@ with t3:
             m_ai, m_fi = 60, 30
             if not conf_df.empty and 'Hotel' in conf_df.columns:
                 t_r = conf_df[conf_df['Hotel'] == h]
-                if not t_r.empty: m_ai, m_fi = t_r.iloc[0].get('Arr_Ind', 60), t_r.iloc[0].get('Fer_Ind', 30)
-            fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["CO"]*20 + cur_inp[h]["BI"]*15) / 60
+                if not t_r.empty:
+                    m_ai = t_r.iloc[0].get('Arr_Ind', 60)
+                    m_fi = t_r.iloc[0].get('Fer_Ind', 30)
+            
+            # CALCOLO ORE: I gruppi (AG/FG) pesano il 20% in meno degli individuali (stima standard)
+            ore_ind = (cur_inp[h]["AI"] * m_ai + cur_inp[h]["FI"] * m_fi)
+            ore_grp = (cur_inp[h]["AG"] * (m_ai * 0.8) + cur_inp[h]["FG"] * (m_fi * 0.8))
+            extra = (cur_inp[h]["CO"] * 20 + cur_inp[h]["BI"] * 15)
+            
+            fabb[h] = (ore_ind + ore_grp + extra) / 60
         
+        # ... (restante logica di generazione invariata) ...    
         fabb["MACRO: PALME & GARDEN"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
         z_ordine = ["Hotel Castello", "Hotel Castello 4 Piano", "MACRO: PALME & GARDEN"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
         
