@@ -182,6 +182,7 @@ with t_staff:
 
 with t_tempi:
     st.header("⚙️ Tempi Standard")
+    st.info("**Legenda:** AI = Arrivo Istat | FI = Fermata Istat | AG = Arrivo Grande | FG = Fermata Grande | +15 min per Copertura Biancheria (automatico)")
     c_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
     new_c = []
     for h in lista_hotel:
@@ -222,8 +223,6 @@ with t_plan:
     if st.button("🚀 GENERA SCHIERAMENTO", use_container_width=True):
         conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
         attive = df[~df['Nome'].isin(assenti)].copy()
-        
-        # 1. Definiamo le liste base
         pool_spl = attive[attive['Ruolo'] == 'Cameriera'].head(4)['Nome'].tolist()
         st.session_state['spl_v_fin'] = pool_spl
         
@@ -232,98 +231,66 @@ with t_plan:
             if 'HOTEL' not in conf_df.columns:
                 conf_df.rename(columns={conf_df.columns[0]: 'HOTEL'}, inplace=True)
         
-        # 2. Calcolo Fabbisogni
         fabb = {}
         for h in lista_hotel:
             m = conf_df[conf_df['HOTEL'] == h] if not conf_df.empty else pd.DataFrame()
             if not m.empty:
-                m_ai = m.iloc[0].get('AI', m.iloc[0].get('ARR I', 60))
-                m_fi = m.iloc[0].get('FI', m.iloc[0].get('FERM I', 30))
-                m_ag = m.iloc[0].get('AG', m.iloc[0].get('ARR G', 45))
-                m_fg = m.iloc[0].get('FG', m.iloc[0].get('FERM G', 25))
-            else:
-                m_ai, m_fi, m_ag, m_fg = 60, 30, 45, 25
+                m_ai = m.iloc[0].get('AI', 60); m_fi = m.iloc[0].get('FI', 30)
+                m_ag = m.iloc[0].get('AG', 45); m_fg = m.iloc[0].get('FG', 25)
+            else: m_ai, m_fi, m_ag, m_fg = 60, 30, 45, 25
             
+            # Calcolo ore totali includendo i 15 min per il cambio biancheria sulle fermate
             tot_f = cur_inp[h]["FI"] + cur_inp[h]["FG"]
             fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["AG"]*m_ag + cur_inp[h]["FG"]*m_fg + tot_f*15) / 60
         
         fabb["MACRO: PALME & GARDEN"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
         z_ord = ["Hotel Castello", "Hotel Castello 4 Piano", "MACRO: PALME & GARDEN"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
         
-        # 3. Assegnazione con Icone
         gia_a, ris = set(), []
         for zona in z_ord:
             o_n, t_h, o_f = fabb.get(zona, 0), [], 0
             
-            # --- Governanti ---
+            # Governanti
             gov = attive[(attive['Ruolo'] == 'Governante') & (~attive['Nome'].isin(gia_a))]
             mask_g = gov['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)
             for _, g in gov[mask_g].iterrows():
-                t_h.append(f"⭐ {g['Nome']} (Gov.)")
-                gia_a.add(g['Nome'])
+                t_h.append(f"⭐ {g['Nome']} (Gov.)"); gia_a.add(g['Nome'])
             
-            # --- Cameriere ---
+            # Cameriere
             if o_n > 0 or zona in ["Hotel Castello", "Hotel Castello 4 Piano"]:
                 cand = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
                 cand['Pr'] = cand['Zone_Padronanza'].apply(lambda x: 0 if zona.replace("Hotel ", "").lower() in str(x).lower() else 1)
-                
                 for _, p in cand.sort_values('Pr').iterrows():
                     if p['Nome'] in gia_a: continue
                     if o_f < (o_n if o_n > 0 else 7.5):
-                        is_spl = p['Nome'] in pool_spl
-                        is_pt = p['Part_Time'] == 1
+                        is_spl, is_pt = p['Nome'] in pool_spl, p['Part_Time'] == 1
                         ico = "🌙 " if is_spl else ("🕒 " if is_pt else "")
-                        
-                        t_h.append(f"{ico}{p['Nome']}")
-                        gia_a.add(p['Nome'])
+                        t_h.append(f"{ico}{p['Nome']}"); gia_a.add(p['Nome'])
                         o_f += 5.0 if (is_pt or is_spl) else 7.5
-                        
-                        c_pre = str(p.get('Lavora_Bene_Con', '')).strip()
-                        if c_pre in attive['Nome'].values and c_pre not in gia_a:
-                            p_c = attive[attive['Nome'] == c_pre].iloc[0]
-                            is_spl_c = c_pre in pool_spl
-                            is_pt_c = p_c['Part_Time'] == 1
-                            ico_c = "🌙 " if is_spl_c else ("🕒 " if is_pt_c else "")
-                            t_h.append(f"{ico_c}{c_pre}")
-                            gia_a.add(c_pre)
-                            o_f += 5.0 if (is_pt_c or is_spl_c) else 7.5
                     else: break
             
             if t_h:
-                if len([n for n in t_h if "Gov." not in n]) % 2 != 0:
-                    rest = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))]
-                    if not rest.empty:
-                        r_p = rest.iloc[0]
-                        ico_r = "🌙 " if r_p['Nome'] in pool_spl else ("🕒 " if r_p['Part_Time'] == 1 else "")
-                        t_h.append(f"{ico_r}{r_p['Nome']}")
-                        gia_a.add(r_p['Nome'])
+                # Conteggi per etichetta
+                n_gov = len([n for n in t_h if "⭐" in n])
+                n_spl = len([n for n in t_h if "🌙" in n])
+                n_pt = len([n for n in t_h if "🕒" in n])
+                n_std = len(t_h) - n_gov - n_spl - n_pt
+                info_team = f"Tot: {len(t_h)} (Gov: {n_gov}, Std: {n_std}, PT: {n_pt}, Spl: {n_spl})"
                 
-                ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Req": round(o_n, 1)})
+                ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Req": round(o_n, 1), "Info": info_team})
         
         st.session_state['res_v_fin'] = ris
         st.rerun()
+
     if 'res_v_fin' in st.session_state:
-        st.divider()
-        final_l = []
-        spl = st.session_state.get('spl_v_fin', [])
-        
+        st.divider(); final_l = []
         for i, r in enumerate(st.session_state['res_v_fin']):
-            with st.expander(f"📍 {r['Hotel']} (Req: {r['Req']}h)"):
-                # Puliamo i nomi dalle icone per farli combaciare con nomi_db
-                default_puliti = [
-                    n.replace("⭐ ", "").replace(" (Gov.)", "").replace("🌙 ", "").replace("🕒 ", "").strip() 
-                    for n in r['Team'].split(",")
-                ]
-                
-                # Il multiselect ora troverà i nomi corretti in nomi_db
-                s = st.multiselect(
-                    f"Team {r['Hotel']}", 
-                    nomi_db, 
-                    default=default_puliti, 
-                    key=f"e_{i}"
-                )
+            with st.expander(f"📍 {r['Hotel']} | {r['Info']} | {r['Req']}h"):
+                def_p = [n.replace("⭐ ", "").replace(" (Gov.)", "").replace("🌙 ", "").replace("🕒 ", "").strip() for n in r['Team'].split(",")]
+                s = st.multiselect(f"Modifica Team {r['Hotel']}", nomi_db, default=def_p, key=f"e_{i}")
                 final_l.append({"Hotel": r['Hotel'], "Team": ", ".join(s)})
         
         if st.button("🧊 SCARICA PDF"):
-            pdf = genera_pdf_planning(data_p_str, final_l, spl, assenti)
-            st.download_button("📥 DOWNLOAD", pdf, f"Planning_{data_p}.pdf")
+            pdf = genera_pdf_planning(data_p_str, final_l, st.session_state.get('spl_v_fin', []), assenti)
+            st.download_button("📥 DOWNLOAD", pdf, f"Planning_{data_p}.pdf")                
+                
