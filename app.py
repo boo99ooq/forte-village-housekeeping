@@ -145,44 +145,51 @@ with t2:
         pd.DataFrame(new_c).to_csv(FILE_CONFIG, index=False); st.success("Salvati!")
 
 
-        with t3:
+       with t3:
     st.header("🚀 Planning")
-    data_p = st.date_input("Data:", datetime.now(), key="date_p_final_v4")
-    assenti = st.multiselect("🛌 Assenti/Riposi:", nomi_db, key="ass_p_final_v4")
+    # Tutto ciò che segue è spostato a destra di un livello (4 spazi)
+    col_d, col_a = st.columns([1, 2])
+    data_p = col_d.date_input("Data:", datetime.now(), key="date_p_final_v5")
+    assenti = col_a.multiselect("🛌 Assenti/Riposi:", nomi_db, key="ass_p_final_v5")
     
+    st.write("### 📊 Inserimento Carico Lavoro")
     cur_inp = {}
-    st.columns([2,1,1,1,1])[0].write("**Hotel**")
+    
+    # Intestazione griglia
+    h_col = st.columns([2, 1, 1, 1, 1])
+    h_col[0].write("**Hotel**")
+    h_col[1].write("AI")
+    h_col[2].write("FI")
+    h_col[3].write("COP")
+    h_col[4].write("BIA")
+    
     for h in lista_hotel:
         r = st.columns([2, 1, 1, 1, 1])
         r[0].write(f"**{h}**")
-        p_ai = r[1].number_input("AI", 0, 100, 0, key=f"z_ai_v4_{h}", label_visibility="collapsed")
-        p_fi = r[2].number_input("FI", 0, 100, 0, key=f"z_fi_v4_{h}", label_visibility="collapsed")
-        p_co = r[3].number_input("COP", 0, 100, 0, key=f"z_co_v4_{h}", label_visibility="collapsed")
-        p_bi = r[4].number_input("BIA", 0, 100, 0, key=f"z_bi_v4_{h}", label_visibility="collapsed")
+        p_ai = r[1].number_input("AI", 0, 100, 0, key=f"z_ai_v5_{h}", label_visibility="collapsed")
+        p_fi = r[2].number_input("FI", 0, 100, 0, key=f"z_fi_v5_{h}", label_visibility="collapsed")
+        p_co = r[3].number_input("COP", 0, 100, 0, key=f"z_co_v5_{h}", label_visibility="collapsed")
+        p_bi = r[4].number_input("BIA", 0, 100, 0, key=f"z_bi_v5_{h}", label_visibility="collapsed")
         cur_inp[h] = {"AI": p_ai, "FI": p_fi, "COP": p_co, "BIA": p_bi}
 
-    if st.button("🚀 GENERA SCHIERAMENTO", key="btn_gen_plan_v4"):
-        # Caricamento configurazione tempi
+    if st.button("🚀 GENERA SCHIERAMENTO", key="btn_gen_plan_v5"):
+        # Logica di calcolo
         conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
         attive = df[~df['Nome'].isin(assenti)].copy()
         
-        # 1. Identificazione Spezzati (solo cameriere)
+        # 1. Spezzati
         pool_spl = attive[(attive['Part_Time'] == 0) & (attive['Indisp_Spezzato'] == 0) & (attive['Ruolo'] == 'Cameriera')].sort_values('Conteggio_Spezzati').head(4)['Nome'].tolist()
         
-        # 2. Calcolo Fabbisogno Orario
+        # 2. Calcolo Ore
         fabb = {}
         for h in lista_hotel:
-            # FIX SICUREZZA: Controlla se l'hotel esiste nel file tempi
             t_row = conf_df[conf_df['Hotel'] == h] if not conf_df.empty else pd.DataFrame()
-            
             if not t_row.empty:
                 t = t_row.iloc[0]
-                min_ai, min_fi = t['Arr_Ind'], t['Fer_Ind']
+                m_ai, m_fi = t['Arr_Ind'], t['Fer_Ind']
             else:
-                # Tempi di backup se l'hotel non è configurato nel Tab 2
-                min_ai, min_fi = 60, 30
-            
-            fabb[h] = (cur_inp[h]["AI"]*min_ai + cur_inp[h]["FI"]*min_fi + cur_inp[h]["COP"]*(min_fi/3) + cur_inp[h]["BIA"]*(min_fi/4)) / 60
+                m_ai, m_fi = 60, 30
+            fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["COP"]*(m_fi/3) + cur_inp[h]["BIA"]*(m_fi/4)) / 60
         
         fabb["MACRO: PALME & GARDEN"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
         zone_p = [h for h in lista_hotel if h not in ["Le Palme", "Hotel Castello Garden"]] + ["MACRO: PALME & GARDEN"]
@@ -192,13 +199,13 @@ with t2:
             o_n = fabb.get(zona, 0)
             t_h, o_f = [], 0
             
-            # Assegnazione Governante (Priscilla/Febe)
+            # Gov (Priscilla/Febe)
             gov = attive[(attive['Ruolo'] == 'Governante') & (~attive['Nome'].isin(gia_a)) & 
                          (attive['Zone_Padronanza'].apply(lambda x: str(x).lower() in zona.lower() or zona.lower() in str(x).lower()))]
             for _, g in gov.iterrows():
                 t_h.append(f"⭐ {g['Nome']} (Gov.)"); gia_a.append(g['Nome'])
 
-            # Assegnazione Cameriere
+            # Cameriere
             if o_n > 0:
                 cand = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
                 cand['Pr'] = cand['Zone_Padronanza'].apply(lambda x: 0 if (str(x).lower() in zona.lower() or zona.lower() in str(x).lower()) else 1)
@@ -208,26 +215,23 @@ with t2:
                         t_h.append(p['Nome']); gia_a.append(p['Nome'])
                         o_f += 5.0 if (p['Part_Time'] == 1 or p['Nome'] in pool_spl) else 7.5
                     else: break
-            
-            if t_h:
-                ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Ore": round(o_n, 1)})
+            if t_h: ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Ore": round(o_n, 1)})
         
-        st.session_state['r_v4'] = ris
-        st.session_state['s_v4'] = pool_spl
-        st.session_state['l_v4'] = list(set(attive[attive['Ruolo']=='Cameriera']['Nome']) - set(gia_a))
+        st.session_state['r_v5'] = ris
+        st.session_state['s_v5'] = pool_spl
+        st.session_state['l_v5'] = list(set(attive[attive['Ruolo']=='Cameriera']['Nome']) - set(gia_a))
 
-    # --- VISUALIZZAZIONE RISULTATI ---
-    if 'r_v4' in st.session_state:
+    # --- RISULTATI ---
+    if 'r_v5' in st.session_state:
         st.divider()
         final_l = []
-        for i, r in enumerate(st.session_state['r_v4']):
-            with st.expander(f"📍 {r['Hotel']} (Fabbisogno: {r['Ore']}h)"):
+        for i, r in enumerate(st.session_state['r_v5']):
+            with st.expander(f"📍 {r['Hotel']} (Necessarie: {r['Ore']}h)"):
                 cur_t = [n.strip() for n in r['Team'].split(",")]
-                opts = sorted(list(set(cur_t) | set(st.session_state['l_v4'])))
-                edt = st.multiselect(f"Team {r['Hotel']}", opts, default=cur_t, key=f"ms_v4_fin_{i}")
+                opts = sorted(list(set(cur_t) | set(st.session_state['l_v5'])))
+                edt = st.multiselect(f"Team {r['Hotel']}", opts, default=cur_t, key=f"ms_v5_{i}")
                 final_l.append({"Hotel": r['Hotel'], "Team": ", ".join(edt)})
         
-        if st.button("🧊 CONFERMA E SCARICA PDF", key="btn_pdf_v4"):
-            pdf = genera_pdf(data_p.strftime("%d/%m/%Y"), final_l, st.session_state['s_v4'], assenti)
-            st.download_button("📥 DOWNLOAD", pdf, f"Planning_{data_p}.pdf", "application/pdf", key="btn_dl_v4")
-       
+        if st.button("🧊 CONFERMA E SCARICA PDF", key="btn_pdf_v5"):
+            pdf = genera_pdf(data_p.strftime("%d/%m/%Y"), final_l, st.session_state['s_v5'], assenti)
+            st.download_button("📥 DOWNLOAD", pdf, f"Planning_{data_p}.pdf", "application/pdf", key="btn_dl_v5")
