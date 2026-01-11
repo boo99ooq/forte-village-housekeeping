@@ -17,7 +17,6 @@ st.set_page_config(page_title="Resort Housekeeping Master", layout="wide")
 # --- DATABASE ---
 FILE_STAFF = 'Housekeeping_DB - Staff.csv'
 FILE_CONFIG = 'config_tempi.csv'
-FILE_HISTORY = 'storico_planning.csv'
 
 def load_data():
     if os.path.exists(FILE_STAFF):
@@ -48,33 +47,25 @@ def get_rating_bar(row):
         return "🟩"*int(voto) + "🟨"*(1 if (voto%1)>=0.5 else 0) + "⬜"*(5-int(voto+0.5)), voto
     except: return "⬜"*5, 0.0
 
-# --- PDF GENERATOR ---
 def genera_pdf(data_str, schieramento, split_list, lista_assenti):
     buffer = BytesIO()
     p = canvas.Canvas(buffer, pagesize=A4)
     w, h = A4
-    
-    # Intestazione
     p.setFont("Helvetica-Bold", 18)
     p.drawString(50, h - 50, f"PLANNING HOUSEKEEPING - {data_str}")
     p.line(50, h - 60, 540, h - 60)
-    
     y = h - 85
     if lista_assenti:
-        p.setFont("Helvetica-Bold", 10)
-        p.setFillColorRGB(0.7, 0, 0)
-        p.drawString(50, y, f"🛌 ASSENTI / RIPOSI OGGI: {', '.join(lista_assenti)}")
-        y -= 25
-        p.setFillColorRGB(0, 0, 0)
-
+        p.setFont("Helvetica-Bold", 10); p.setFillColorRGB(0.7, 0, 0)
+        p.drawString(50, y, f"🛌 ASSENTI: {', '.join(lista_assenti)}")
+        y -= 25; p.setFillColorRGB(0, 0, 0)
     for res in schieramento:
         if y < 100: p.showPage(); y = h - 70
         p.setFont("Helvetica-Bold", 12); p.drawString(50, y, f"ZONA: {res['Hotel'].upper()}")
         y -= 15; p.setFont("Helvetica", 10); p.drawString(60, y, f"Team: {res['Team']}")
         y -= 25
-    
     y -= 20; p.line(50, y, 540, y); p.setFont("Helvetica-Bold", 13)
-    p.drawString(50, y - 30, "🌙 COPERTURA SERALE (19:00 - 22:00)")
+    p.drawString(50, y - 30, "🌙 COPERTURA SERALE")
     p.setFont("Helvetica", 11); p.drawString(60, y - 50, f"Personale: {', '.join(split_list)}")
     p.save(); buffer.seek(0)
     return buffer
@@ -88,22 +79,17 @@ with st.sidebar:
     lista_nomi = sorted(df['Nome'].tolist()) if not df.empty else []
     sel = st.selectbox("Seleziona collaboratore:", ["--- NUOVO ---"] + lista_nomi)
     current = df[df['Nome'] == sel].iloc[0] if sel != "--- NUOVO ---" else None
-
     with st.form("form_staff"):
         f_nome = st.text_input("Nome", value=str(current['Nome']) if current is not None else "")
         f_ruolo = st.selectbox("Ruolo", ["Cameriera", "Governante"], index=0 if not current or "Cameriera" in str(current['Ruolo']) else 1)
         c_opt = st.columns(2)
         f_pt = c_opt[0].checkbox("🕒 Part-Time", value=bool(current['Part_Time']) if current is not None else False)
         f_indisp = c_opt[1].checkbox("🚫 No Spezzato", value=bool(current['Indisp_Spezzato']) if current is not None else False)
-        
-        opzioni_auto = ["Auto Propria / Nessuno"] + [n for n in lista_nomi if n != f_nome]
-        v_attuale = str(current['Auto']) if current is not None and str(current['Auto']) != "0" else "Auto Propria / Nessuno"
+        opzioni_auto = ["Nessuno"] + [n for n in lista_nomi if n != f_nome]
+        v_attuale = str(current['Auto']) if current is not None and str(current['Auto']) != "0" else "Nessuno"
         f_auto = st.selectbox("Viaggia con...", opzioni_auto, index=opzioni_auto.index(v_attuale) if v_attuale in opzioni_auto else 0)
-        
-        z_attuale = str(current['Zone_Padronanza']) if current is not None else lista_hotel[0]
-        f_zone = st.selectbox("Zona Padronanza", lista_hotel, index=lista_hotel.index(z_attuale) if z_attuale in lista_hotel else 0)
-        
-        st.write("**Valutazioni (1-10)**")
+        f_zone = st.selectbox("Zona Padronanza", lista_hotel, index=lista_hotel.index(str(current['Zone_Padronanza'])) if current is not None and str(current['Zone_Padronanza']) in lista_hotel else 0)
+        st.write("**Valutazioni**")
         col1, col2 = st.columns(2)
         v_pro = col1.number_input("Prof.", 1, 10, int(current['Professionalita']) if current is not None else 5)
         v_esp = col2.number_input("Esp.", 1, 10, int(current['Esperienza']) if current is not None else 5)
@@ -111,11 +97,9 @@ with st.sidebar:
         v_dis = col2.number_input("Disp.", 1, 10, int(current['Disponibilita']) if current is not None else 5)
         v_emp = col1.number_input("Empatia", 1, 10, int(current['Empatia']) if current is not None else 5)
         v_gui = col2.number_input("Guida", 1, 10, int(current['Capacita_Guida']) if current is not None else 5)
-
-        if st.form_submit_button("💾 SALVA SCHEDA"):
-            auto_salva = f_auto if f_auto != "Auto Propria / Nessuno" else ""
+        if st.form_submit_button("💾 SALVA"):
             nuova_d = {"Nome": f_nome, "Ruolo": f_ruolo, "Part_Time": 1 if f_pt else 0, "Indisp_Spezzato": 1 if f_indisp else 0, 
-                       "Auto": auto_salva, "Zone_Padronanza": f_zone, "Professionalita": v_pro, "Esperienza": v_esp, 
+                       "Auto": f_auto if f_auto != "Nessuno" else "", "Zone_Padronanza": f_zone, "Professionalita": v_pro, "Esperienza": v_esp, 
                        "Tenuta_Fisica": v_ten, "Disponibilita": v_dis, "Empatia": v_emp, "Capacita_Guida": v_gui}
             if current is not None: df = df[df['Nome'] != sel]
             df = pd.concat([df, pd.DataFrame([nuova_d])], ignore_index=True)
@@ -127,8 +111,7 @@ t1, t2, t3, t4 = st.tabs(["🏆 Dashboard", "⚙️ Tempi", "🚀 Planning", "�
 with t1:
     if not df.empty:
         df[['Performance', 'Rating_Num']] = df.apply(lambda r: pd.Series(get_rating_bar(r)), axis=1)
-        df['G_Riposo'] = (datetime.now() - pd.to_datetime(df['Ultimo_Riposo'].replace(0, "2025-01-01"))).dt.days
-        st.dataframe(df[['Nome', 'Ruolo', 'Performance', 'G_Riposo', 'Conteggio_Spezzati', 'Auto']].sort_values('G_Riposo', ascending=False), use_container_width=True, hide_index=True)
+        st.dataframe(df[['Nome', 'Ruolo', 'Performance', 'Conteggio_Spezzati', 'Auto']], use_container_width=True, hide_index=True)
 
 with t2:
     st.header("⚙️ Tempi Standard")
@@ -151,9 +134,9 @@ with t2:
 with t3:
     st.header("🚀 Planning Giornaliero")
     data_p = st.date_input("Giorno:", datetime.now())
-    assenti = st.multiselect("🛌 Assenti/Riposi:", sorted(df['Nome'].tolist()) if not df.empty else [])
+    assenti = st.multiselect("🛌 Assenti/Riposi:", lista_nomi)
     
-    st.write("### 📊 Carico Camere")
+    st.write("### 📊 Inserimento Camere")
     cur_inp = []
     for h in lista_hotel:
         c = st.columns([2, 0.8, 0.8, 0.8, 0.8])
@@ -185,15 +168,16 @@ with t3:
         attive_all = df[(~df['Nome'].isin(assenti)) & (df['Ruolo'] == 'Cameriera')]
         
         for i, row in enumerate(st.session_state['res']):
-            with st.expander(f"📍 {row['Hotel']} (Serve: {row['Ore Servono']}h)"):
-                # Lista dinamica per multiselect: chi è libero o già qui
+            # FIX KEYERROR: Usiamo get() per sicurezza
+            ore_nec_val = row.get('Ore Servono', 0)
+            with st.expander(f"📍 {row['Hotel']} (Serve: {ore_nec_val}h)"):
                 occupate_altrove = [n for idx, r in enumerate(st.session_state['res']) if idx != i for n in r['Team'].split(", ")]
                 libere = sorted(list(set(attive_all['Nome'].tolist()) - set(occupate_altrove) - set(st.session_state['spl'])))
                 
-                edit_team = st.multiselect(f"Modifica Team {row['Hotel']}", libere + row['Team'].split(", "), default=[n for n in row['Team'].split(", ") if n])
+                edit_team = st.multiselect(f"Modifica Team {row['Hotel']}", libere + row['Team'].split(", "), default=[n for n in row['Team'].split(", ") if n], key=f"ms_{row['Hotel']}")
                 ore_f = sum([5.0 if (attive_all[attive_all['Nome'] == n].iloc[0]['Part_Time'] == 1) else 7.5 for n in edit_team])
                 
-                if ore_f < row['Ore Servono']: st.warning(f"Mancano {round(row['Ore Servono']-ore_f,1)}h")
+                if ore_f < ore_nec_val: st.warning(f"Mancano {round(ore_nec_val-ore_f,1)}h")
                 else: st.success(f"Coperto! ({ore_f}h)")
                 final_team_list.append({"Hotel": row['Hotel'], "Team": ", ".join(edit_team)})
 
