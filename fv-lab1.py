@@ -113,126 +113,145 @@ with t2:
 with t3:
     st.header("🚀 Planning Giornaliero")
     
-    # Riga per data e assenti
+    # --- INPUT GENERALI ---
     col_data, col_ass = st.columns([1, 2])
     data_p = col_data.date_input("Giorno:", datetime.now(), key="d_v_fin")
-    assenti = col_ass.multiselect("🛌 Assenti:", nomi_db, key="a_v_fin")
+    assenti = col_ass.multiselect("🛌 Assenti/Riposi:", nomi_db, key="a_v_fin")
     
     st.divider()
     
-    # --- INTESTAZIONE COLONNE ---
+    # --- INTESTAZIONE TABELLA LAVORO ---
     st.write("### 📊 Inserimento Carico Lavoro")
-    # Ho allargato le colonne per far stare le scritte
     h_col = st.columns([2.5, 1, 1, 1, 1])
     h_col[0].markdown("**HOTEL**")
     h_col[1].markdown("**AI** (Arr)")
     h_col[2].markdown("**FI** (Fer)")
-    h_col[3].markdown("**COP** (Serali)")
-    h_col[4].markdown("**BIA** (Cambio)")
+    h_col[3].markdown("**COP** (Ser)")
+    h_col[4].markdown("**BIA** (Cam)")
 
     cur_inp = {}
     for h in lista_hotel:
         r = st.columns([2.5, 1, 1, 1, 1])
         r[0].write(f"**{h}**")
-        
-        # Inserimento dati numerici
         v_ai = r[1].number_input("AI", 0, 100, 0, key=f"v_ai_{h}", label_visibility="collapsed")
         v_fi = r[2].number_input("FI", 0, 100, 0, key=f"v_fi_{h}", label_visibility="collapsed")
         v_co = r[3].number_input("COP", 0, 100, 0, key=f"v_co_{h}", label_visibility="collapsed")
         v_bi = r[4].number_input("BIA", 0, 100, 0, key=f"v_bi_{h}", label_visibility="collapsed")
-        
         cur_inp[h] = {"AI": v_ai, "FI": v_fi, "CO": v_co, "BI": v_bi}
 
-    st.write("") # Spazio extra
-    
+    st.write("") 
+
+    # --- PULSANTE GENERAZIONE (Indentato correttamente) ---
     if st.button("🚀 GENERA SCHIERAMENTO", use_container_width=True):
-        # ... qui segue la logica di generazione ...
-    if st.button("🚀 GENERA SCHIERAMENTO"):
         conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
         attive = df[~df['Nome'].isin(assenti)].copy()
         
-        # Le prime 4 cameriere FT diventano lo "Spezzato" per le coperture
+        # Spezzati per coperture
         pool_spl = attive[attive['Ruolo'] == 'Cameriera'].head(4)['Nome'].tolist()
         st.session_state['spl_v_fin'] = pool_spl
-
-        # ... (Logica di calcolo fabbisogno e assegnazione coppie/affinità che abbiamo già scritto) ...
-        # [Assicurati di mantenere qui il codice dell'ultima versione per l'assegnazione squadre]
-
-    # --- VISUALIZZAZIONE RISULTATI ---
-    if 'res_v_fin' in st.session_state:
-        # ... (Qui va il blocco del Bilancio Ore e degli Expander che abbiamo sistemato prima) ...
         
-        # --- AGGIUNTA SQUADRA COPERTURE IN FONDO ---
-        st.divider()
-        st.subheader("🌙 Turno Serale (Coperture)")
-        chi_fa_coperture = st.session_state.get('spl_v_fin', [])
-        if chi_fa_coperture:
-            st.success(f"Le seguenti persone faranno il turno 19:00 - 22:00: **{', '.join(chi_fa_coperture)}**")
-        else:
-            st.warning("Nessuna persona assegnata alle coperture.")
-    if st.button("🚀 GENERA SCHIERAMENTO"):
-        conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
-        attive = df[~df['Nome'].isin(assenti)].copy()
-        pool_spl = attive[attive['Ruolo'] == 'Cameriera'].head(4)['Nome'].tolist()
+        fabb = {}
+        for h in lista_hotel:
+            m_ai, m_fi = 60, 30
+            if not conf_df.empty and 'Hotel' in conf_df.columns:
+                t_r = conf_df[conf_df['Hotel'] == h]
+                if not t_r.empty:
+                    m_ai = t_r.iloc[0].get('Arr_Ind', 60)
+                    m_fi = t_r.iloc[0].get('Fer_Ind', 30)
+            # Calcolo fabbisogno (COP e BIA aggiungono tempo stimato)
+            fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["CO"]*20 + cur_inp[h]["BI"]*15) / 60
         
-      # --- VISUALIZZAZIONE RISULTATI E RIEPILOGO ---
+        fabb["MACRO: PALME & GARDEN"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
+        z_ordine = ["Hotel Castello", "Hotel Castello 4 Piano", "MACRO: PALME & GARDEN"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
+        
+        gia_a = set()
+        ris = []
+        for zona in z_ordine:
+            o_n, t_h, o_f = fabb.get(zona, 0), [], 0
+            
+            # Gov
+            gov = attive[(attive['Ruolo'] == 'Governante') & (~attive['Nome'].isin(gia_a))]
+            mask_g = gov['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)
+            for _, g in gov[mask_g].iterrows():
+                t_h.append(f"⭐ {g['Nome']} (Gov.)"); gia_a.add(g['Nome'])
+            
+            # Cameriere + Affinità
+            if o_n > 0 or zona in ["Hotel Castello", "Hotel Castello 4 Piano"]:
+                cand = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
+                cand['Pr'] = cand['Zone_Padronanza'].apply(lambda x: 0 if zona.replace("Hotel ", "").lower() in str(x).lower() else 1)
+                cand = cand.sort_values(['Pr'], ascending=True)
+                for _, p in cand.iterrows():
+                    if p['Nome'] in gia_a: continue
+                    if o_f < (o_n if o_n > 0 else 7.5):
+                        t_h.append(p['Nome']); gia_a.add(p['Nome'])
+                        o_f += 5.0 if (p.get('Part_Time', 0) == 1 or p['Nome'] in pool_spl) else 7.5
+                        # Tira dentro compagna
+                        c_pref = str(p.get('Lavora_Bene_Con', '')).strip()
+                        if c_pref and c_pref in attive['Nome'].values and c_pref not in gia_a:
+                            t_h.append(c_pref); gia_a.add(c_pref)
+                            p_c = attive[attive['Nome'] == c_pref].iloc[0]
+                            o_f += 5.0 if (p_c.get('Part_Time', 0) == 1 or c_pref in pool_spl) else 7.5
+                    else: break
+            
+            # Pareggiamento Coppie
+            if len(t_h) > 0 and len(t_h) % 2 != 0:
+                rest = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
+                if not rest.empty:
+                    rest['Pr'] = rest['Zone_Padronanza'].apply(lambda x: 0 if zona.replace("Hotel ", "").lower() in str(x).lower() else 1)
+                    rinf = rest.sort_values(['Pr'], ascending=True).iloc[0]
+                    t_h.append(rinf['Nome']); gia_a.add(rinf['Nome'])
+
+            if t_h: ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Req": round(o_n, 1)})
+        
+        st.session_state['res_v_fin'] = ris
+
+    # --- AREA RISULTATI (Fuori dal bottone ma dentro with t3) ---
     if 'res_v_fin' in st.session_state:
         st.divider()
         tutte_attive = set(n for n in nomi_db if n not in assenti)
         
-        final_list = []
+        # Calcolo chi è scelto per liberare la panchina
         tutti_scelti = set()
-        
-        # 1. Raccogliamo i nomi scelti per calcolare chi è libero
         for i in range(len(st.session_state['res_v_fin'])):
             val = st.session_state.get(f"edt_f_{i}", [])
             tutti_scelti.update([n.replace("⭐ ", "").replace(" (Gov.)", "").strip() for n in val])
         
-        # 2. Mostriamo gli hotel e calcoliamo il bilancio ore
+        vere_libere = sorted(list(tutte_attive - tutti_scelti))
+        
+        c1, c2 = st.columns(2)
+        c1.metric("Persone Impegnate", len(tutti_scelti))
+        c2.metric("In Panchina", len(vere_libere))
+        
+        with st.expander("🏃 PANCHINA (Disponibili)", expanded=True):
+            st.write(", ".join(vere_libere) if vere_libere else "Tutte assegnate")
+
+        final_list = []
         for i, r in enumerate(st.session_state['res_v_fin']):
             key = f"edt_f_{i}"
-            # Usiamo .get per evitare il crash se l'hotel non ha ancora i dati completi
             attuali = st.session_state.get(key, [n.strip() for n in r.get('Team', '').split(",") if n.strip()])
             
             # Calcolo ore coperte
-            ore_coperte = 0
-            for nome in attuali:
-                n_pulito = nome.replace("⭐ ", "").replace(" (Gov.)", "").strip()
-                match = df[df['Nome'] == n_pulito]
-                if not match.empty:
-                    p_data = match.iloc[0]
-                    if p_data['Ruolo'] == 'Cameriera':
-                        is_pt = p_data.get('Part_Time', 0) == 1
-                        is_spl = n_pulito in st.session_state.get('spl_v_fin', [])
-                        ore_coperte += 5.0 if (is_pt or is_spl) else 7.5
+            o_cop = 0
+            for n in attuali:
+                n_p = n.replace("⭐ ", "").replace(" (Gov.)", "").strip()
+                match = df[df['Nome'] == n_p]
+                if not match.empty and match.iloc[0]['Ruolo'] == 'Cameriera':
+                    o_cop += 5.0 if (match.iloc[0].get('Part_Time', 0) == 1 or n_p in st.session_state.get('spl_v_fin', [])) else 7.5
             
-            # PROTEZIONE KEYERROR: usiamo .get('Req', 0)
-            fabbisogno = r.get('Req', 0) 
-            diff = round(ore_coperte - fabbisogno, 1)
+            fabb = r.get('Req', 0)
+            diff = round(o_cop - fabb, 1)
+            b_str = f"✅ OK (+{diff}h)" if diff >= 0 else f"⚠️ SOTTO ({diff}h)"
             
-            bilancio_str = f"✅ OK (+{diff}h)" if diff >= 0 else f"⚠️ SOTTO ({diff}h)"
-            
-            with st.expander(f"📍 {r['Hotel']} | Servono: {fabbisogno}h | Coperti: {ore_coperte}h | {bilancio_str}"):
-                vere_libere = sorted(list(tutte_attive - tutti_scelti))
+            with st.expander(f"📍 {r['Hotel']} | Servono: {fabb}h | Coperti: {o_cop}h | {b_str}"):
                 opts = sorted(list(set(attuali) | set(vere_libere)))
-                
-                if len(attuali) % 2 != 0:
-                    st.warning(f"👫 Squadra dispari ({len(attuali)} persone).")
-                
-                scelta = st.multiselect(f"Modifica Team {r['Hotel']}", opts, default=attuali, key=key)
-                # Salviamo i dati aggiornati per il PDF
-                final_list.append({
-                    "Hotel": r['Hotel'], 
-                    "Team": ", ".join(scelta), 
-                    "Bilancio": bilancio_str,
-                    "Req": fabbisogno
-                })
+                if len(attuali) % 2 != 0: st.warning("👫 Squadra dispari.")
+                scelta = st.multiselect(f"Modifica {r['Hotel']}", opts, default=attuali, key=key)
+                final_list.append({"Hotel": r['Hotel'], "Team": ", ".join(scelta), "Bilancio": b_str})
 
-        # 3. Riepilogo Panchina
-        vere_libere_finali = sorted(list(tutte_attive - tutti_scelti))
-        if vere_libere_finali:
-            st.info(f"🏃 IN PANCHINA: {', '.join(vere_libere_finali)}")
+        # Visualizzazione Coperture
+        st.subheader("🌙 Coperture Serali")
+        st.info(f"Personale assegnato: {', '.join(st.session_state.get('spl_v_fin', []))}")
 
-        if st.button("🧊 CONFERMA E SCARICA PDF"):
+        if st.button("🧊 SCARICA PDF"):
             pdf = genera_pdf(data_p.strftime("%d/%m/%Y"), final_list, st.session_state.get('spl_v_fin', []), assenti)
             st.download_button("📥 DOWNLOAD", pdf, f"Planning_{data_p}.pdf")
