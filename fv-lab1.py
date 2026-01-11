@@ -254,15 +254,26 @@ with t_tempi:
             st.session_state['spl_v_fin'] = pool_spl
             
             fabb = {}
+            minuti_extra_tot = 0 # Inizializziamo il contatore per COP e BIANC
+            
             for h in lista_hotel:
                 m = conf_df[conf_df['HOTEL'] == h.upper()] if not conf_df.empty else pd.DataFrame()
                 m_fi = m.iloc[0].get('FI', 30) if not m.empty else 30
                 m_ai = m.iloc[0].get('AI', 60) if not m.empty else 60
                 m_ag = m.iloc[0].get('AG', 45) if not m.empty else 45
                 m_fg = m.iloc[0].get('FG', 25) if not m.empty else 25
+                
+                # Calcolo minuti extra richiesti
                 t_cop = (m_fi / 3) * cur_inp[h]["COP"]
                 t_bian = (m_fi / 4) * cur_inp[h]["BIAN"]
+                
+                # Sommiamo al carico degli spezzati
+                minuti_extra_tot += (t_cop + t_bian)
+                
                 fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["AG"]*m_ag + cur_inp[h]["FG"]*m_fg + t_cop + t_bian) / 60
+    
+            # Salviamo il carico extra nello stato per visualizzarlo dopo il rerun
+            st.session_state['carico_spezzati_ore'] = round(minuti_extra_tot / 60, 1)
     
             fabb["Palme & Garden"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
             z_ord = ["Hotel Castello", "Hotel Castello 4 Piano", "Palme & Garden"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
@@ -289,7 +300,6 @@ with t_tempi:
                     n_spl = len([n for n in t_h if "🌙" in n])
                     n_pt = len([n for n in t_h if "🕒" in n])
                     n_std = n_cam - n_spl - n_pt
-                    
                     info = f"G:{n_gov} | Cam:{n_cam} (Coppie:{n_cam/2}) | Pome:{n_std} | 🕒:{n_pt} 🌙:{n_spl}"
                     ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Req": round(o_n, 1), "Info": info})
             
@@ -311,10 +321,17 @@ with t_tempi:
                 
             with c2:
                 spl_list = st.session_state.get('spl_v_fin', [])
-                ore_spl_tot = len(spl_list) * 5.0
-                st.error(f"🌙 Pool Spezzati ({len(spl_list)}) | Totale: {ore_spl_tot}h")
+                capacita_tot = len(spl_list) * 5.0
+                carico_effettivo = st.session_state.get('carico_spezzati_ore', 0.0)
+                
+                st.error(f"🌙 Pool Spezzati ({len(spl_list)}) | Carico: {carico_effettivo}h / {capacita_tot}h")
                 st.write(", ".join([f"🌙 {n}" for n in spl_list]))
-                st.caption(f"ℹ️ Forza lavoro spezzati disponibile: {ore_spl_tot} ore totali")
+                
+                # Barra di progresso o indicatore visivo
+                if capacita_tot > 0:
+                    percentuale = min(carico_effettivo / capacita_tot, 1.0)
+                    st.progress(percentuale)
+                    st.caption(f"Lavoro assegnato agli spezzati (Coperture + Biancheria): {carico_effettivo} ore su {capacita_tot} disponibili.")
     
             st.divider()
             final_l = []
