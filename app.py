@@ -1,153 +1,102 @@
 import streamlit as st
 import pandas as pd
 import os
-from datetime import datetime
 
-st.set_page_config(page_title="Resort Housekeeping Master", layout="wide")
+st.set_page_config(page_title="Resort Staff Manager", layout="wide")
 
-# --- CONFIGURAZIONE ---
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1KRQ_jfd60uy80l7p44brg08MVfA93LScV2P3X9Mx8bY/edit?usp=sharing"
-FILE_CONFIG = 'config_tempi.csv'
-FILE_LAST_PLAN = 'ultimo_planning_caricato.csv'
+# --- NOME DEL FILE CARICATO ---
+FILE_STAFF = 'Housekeeping_DB - Staff.csv'
 
-def get_csv_url(url):
+def load_staff():
+    if os.path.exists(FILE_STAFF):
+        df = pd.read_csv(FILE_STAFF)
+        # Pulizia intestazioni da spazi bianchi 
+        df.columns = [c.strip() for c in df.columns]
+        return df.fillna("")
+    else:
+        st.error(f"File {FILE_STAFF} non trovato. Caricalo nella cartella dell'app.")
+        st.stop()
+
+def save_staff(df):
+    # Salvataggio locale delle modifiche apportate nell'app
+    df.to_csv(FILE_STAFF, index=False)
+
+def get_rating_bar(row):
     try:
-        if "/d/" in url:
-            sheet_id = url.split("/d/")[1].split("/")[0]
-            return f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
-        return None
-    except: return None
+        # Calcolo stelle solo per le Cameriere 
+        if 'ameriera' not in str(row['Ruolo']).lower(): 
+            return "N/A", 0.0
+            
+        # Pesi ponderati basati sulle colonne del file 
+        p = pd.to_numeric(row.get('Professionalita', 5), errors='coerce') * 0.25
+        e = pd.to_numeric(row.get('Esperienza', 5), errors='coerce') * 0.20
+        t = pd.to_numeric(row.get('Tenuta_Fisica', 5), errors='coerce') * 0.20
+        d = pd.to_numeric(row.get('Disponibilita', 5), errors='coerce') * 0.15
+        em = pd.to_numeric(row.get('Empatia', 5), errors='coerce') * 0.10
+        g = pd.to_numeric(row.get('Capacita_Guida', 5), errors='coerce') * 0.10
+        
+        # Conversione in base 5 con arrotondamento alla mezza unità
+        voto_5 = round(((p + e + t + d + em + g) / 2) * 2) / 2
+        
+        full = int(voto_5)
+        half = 1 if (voto_5 % 1) >= 0.5 else 0
+        empty = 5 - full - half
+        return "🟩" * full + "🟨" * half + "⬜" * empty, voto_5
+    except:
+        return "⬜⬜⬜⬜⬜", 0.0
 
-# --- GRAFICA E CALCOLO ---
-def get_rating_bar(val):
-    if val <= 0: return "⬜⬜⬜⬜⬜"
-    full = int(val)
-    half = 1 if (val - full) >= 0.5 else 0
-    return "🟩" * full + "🟨" * half + "⬜" * (5 - full - half)
+# --- LOGICA APPLICATIVA ---
+df = load_staff()
 
-def calcola_rating(row):
-    try:
-        # Pesi: Professionalità 25%, Esperienza 20%, Tenuta 20%, Disp 15%, Empatia 10%, Guida 10%
-        p = pd.to_numeric(row.get('Professionalita', 0), errors='coerce') or 0
-        e = pd.to_numeric(row.get('Esperienza', 0), errors='coerce') or 0
-        t = pd.to_numeric(row.get('Tenuta_Fisica', 0), errors='coerce') or 0
-        d = pd.to_numeric(row.get('Disponibilita', 0), errors='coerce') or 0
-        em = pd.to_numeric(row.get('Empatia', 0), errors='coerce') or 0
-        g = pd.to_numeric(row.get('Capacita_Guida', 0), errors='coerce') or 0
-        voto_5 = (p*0.25 + e*0.20 + t*0.20 + d*0.15 + em*0.10 + g*0.10) / 2
-        return round(voto_5 * 2) / 2
-    except: return 0.0
-
-@st.cache_data(ttl=5)
-def load_data():
-    url = get_csv_url(SHEET_URL)
-    if not url: return pd.DataFrame()
-    try:
-        df_temp = pd.read_csv(url)
-        df_temp.columns = [c.strip() for c in df_temp.columns]
-        return df_temp
-    except: return pd.DataFrame()
-
-df = load_data()
-lista_hotel = ["Hotel Castello", "Hotel Castello Garden", "Castello 4 Piano", "Cala del Forte", "Le Dune", "Villa del Parco", "Hotel Pineta", "Bouganville", "Le Palme", "Il Borgo", "Le Ville", "Spazi Comuni"]
-
-if not df.empty:
-    df = df.fillna("")
-    df['Rating_Num'] = df.apply(lambda x: calcola_rating(x) if 'ameriera' in str(x.get('Ruolo', '')).lower() else 0.0, axis=1)
-    df['Performance'] = df['Rating_Num'].apply(get_rating_bar)
-else:
-    st.error("⚠️ Caricamento Foglio Google fallito.")
-    st.stop()
-
-# --- SIDEBAR ---
 with st.sidebar:
-    st.header("📋 Menu")
-    st.markdown(f"[📂 Apri Foglio Google]({SHEET_URL})")
-    st.divider()
-    cerca = st.selectbox("Cerca:", [""] + sorted(df['Nome'].tolist()))
-    if cerca:
-        p = df[df['Nome'] == cerca].iloc[0]
-        st.write(f"**Ruolo:** {p.get('Ruolo')}")
-        if p['Rating_Num'] > 0: st.write(f"**Qualità:** {p['Performance']}")
-        if 'Auto' in df.columns: st.info(f"🚗 Auto: {p.get('Auto', 'N/D')}")
-
-# --- TABS ---
-t1, t2, t3 = st.tabs(["🏆 Dashboard", "⚙️ Tempi", "🚀 Planning"])
-
-with t1:
-    st.subheader("Performance Staff")
-    cols = ['Nome', 'Ruolo', 'Performance', 'Zone_Padronanza', 'Auto', 'Rating_Num']
-    presenti = [c for c in cols if c in df.columns]
-    st.dataframe(df[presenti].sort_values('Rating_Num', ascending=False), 
-                 column_config={"Rating_Num": None}, use_container_width=True, hide_index=True)
-
-with t2:
-    st.header("⚙️ Configurazione Tempi")
-    c_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
-    new_config = []
-    for h in lista_hotel:
-        vs = [60, 30, 45, 20]
-        if not c_df.empty and h in c_df['Hotel'].values:
-            r = c_df[c_df['Hotel'] == h].iloc[0]
-            vs = [int(r['Arr_Ind']), int(r['Fer_Ind']), int(r['Arr_Gru']), int(r['Fer_Gru'])]
-        cols = st.columns([2,1,1,1,1])
-        cols[0].write(f"**{h}**")
-        ai = cols[1].number_input("AI", 5, 200, vs[0], key=f"ai_{h}", label_visibility="collapsed")
-        fi = cols[2].number_input("FI", 5, 200, vs[1], key=f"fi_{h}", label_visibility="collapsed")
-        ag = cols[3].number_input("AG", 5, 200, vs[2], key=f"ag_{h}", label_visibility="collapsed")
-        fg = cols[4].number_input("FG", 5, 200, vs[3], key=f"fg_{h}", label_visibility="collapsed")
-        new_config.append({"Hotel": h, "Arr_Ind": ai, "Fer_Ind": fi, "Arr_Gru": ag, "Fer_Gru": fg})
-    if st.button("💾 Salva Tempi"):
-        pd.DataFrame(new_config).to_csv(FILE_CONFIG, index=False)
-        st.success("Configurazione salvata!")
-
-with t3:
-    st.header("🚀 Planning")
-    lp_df = pd.read_csv(FILE_LAST_PLAN) if os.path.exists(FILE_LAST_PLAN) else pd.DataFrame()
-    assenti = st.multiselect("🏖️ Assenti:", sorted(df['Nome'].tolist()))
-    if st.button("🧹 Reset Planning"):
-        pd.DataFrame(columns=["Hotel", "AI", "FI", "VI", "AG", "FG", "VG"]).to_csv(FILE_LAST_PLAN, index=False)
-        st.rerun()
+    st.header("👤 Pannello Gestione")
+    mode = st.radio("Azione:", ["Modifica/Nuovo", "Elimina"])
     
-    st.divider()
-    if assenti and 'Auto' in df.columns:
-        for a in assenti:
-            auto_v = df[df['Nome'] == a]['Auto'].values[0]
-            if auto_v:
-                comp = df[(df['Auto'] == auto_v) & (~df['Nome'].isin(assenti))]
-                if not comp.empty: st.warning(f"⚠️ {a} assente. Controlla: {', '.join(comp['Nome'].tolist())}")
+    nomi = ["--- NUOVO ---"] + sorted(df['Nome'].tolist())
+    sel = st.selectbox("Seleziona collaboratore:", nomi)
+    current = df[df['Nome'] == sel].iloc[0] if sel != "--- NUOVO ---" else None
 
-    current_in = []
-    h_p = st.columns([2, 1, 1, 1, 1, 1, 1])
-    for i, t in enumerate(["ZONA", "Arr.I", "Fer.I", "Vuo.I", "Arr.G", "Fer.G", "Vuo.G"]): h_p[i].caption(t)
-    for h in lista_hotel:
-        r = lp_df[lp_df['Hotel'] == h] if not lp_df.empty and 'Hotel' in lp_df.columns else pd.DataFrame()
-        vs = [int(r.iloc[0][k]) if not r.empty else 0 for k in ["AI","FI","VI","AG","FG","VG"]]
-        c = st.columns([2, 1, 1, 1, 1, 1, 1])
-        c[0].write(f"**{h}**")
-        vi = [c[i+1].number_input("", 0, 100, vs[i], key=f"p_{k}_{h}", label_visibility="collapsed") for i, k in enumerate(["ai","fi","vi","ag","fg","vg"])]
-        current_in.append({"Hotel": h, "AI": vi[0], "FI": vi[1], "VI": vi[2], "AG": vi[3], "FG": vi[4], "VG": vi[5]})
+    if mode == "Modifica/Nuovo":
+        with st.form("form_staff"):
+            f_nome = st.text_input("Nome", value=current['Nome'] if current is not None else "")
+            f_ruolo = st.selectbox("Ruolo", ["Cameriera", "Governante"], 
+                                   index=0 if current is None else (0 if "Cameriera" in current['Ruolo'] else 1))
+            
+            c1, c2 = st.columns(2)
+            # Caricamento valori dal CSV 
+            f_pro = c1.number_input("Prof.", 0, 10, int(pd.to_numeric(current['Professionalita'], errors='coerce') or 5) if current is not None else 5)
+            f_esp = c2.number_input("Esp.", 0, 10, int(pd.to_numeric(current['Esperienza'], errors='coerce') or 5) if current is not None else 5)
+            f_ten = c1.number_input("Fisico", 0, 10, int(pd.to_numeric(current['Tenuta_Fisica'], errors='coerce') or 5) if current is not None else 5)
+            f_dis = c2.number_input("Disp.", 0, 10, int(pd.to_numeric(current['Disponibilita'], errors='coerce') or 5) if current is not None else 5)
+            f_emp = c1.number_input("Empatia", 0, 10, int(pd.to_numeric(current['Empatia'], errors='coerce') or 5) if current is not None else 5)
+            f_gui = c2.number_input("Guida", 0, 10, int(pd.to_numeric(current['Capacita_Guida'], errors='coerce') or 5) if current is not None else 5)
+            
+            f_zone = st.text_input("Zone", value=current['Zone_Padronanza'] if current is not None else "")
+            f_auto = st.text_input("Auto", value=current['Auto'] if current is not None else "")
 
-    if st.button("🚀 GENERA E CONGELA"):
-        pd.DataFrame(current_in).to_csv(FILE_LAST_PLAN, index=False)
-        conf_df = pd.read_csv(FILE_CONFIG)
-        ris, attive, assegnate = [], df[~df['Nome'].isin(assenti)].copy(), []
-        for row in current_in:
-            if not conf_df.empty and row['Hotel'] in conf_df['Hotel'].values:
-                hc = conf_df[conf_df['Hotel'] == row['Hotel']].iloc[0]
-                row['ore'] = ((row['AI'] + row['VI']) * hc['Arr_Ind'] + (row['FI'] * hc['Fer_Ind']) + (row['AG'] + row['VG']) * hc['Arr_Gru'] + (row['FG'] * hc['Fer_Gru'])) / 60
-            else: row['ore'] = 0
-        for row in sorted(current_in, key=lambda x: x['ore'], reverse=True):
-            if row['ore'] > 0:
-                gov = attive[(attive['Ruolo'].str.contains('overnante', case=False, na=False)) & (attive['Zone_Padronanza'].str.contains(row['Hotel'], na=False))]
-                resp = ", ".join(gov['Nome'].tolist()) if not gov.empty else "🚨 Jolly"
-                n_nec = round(row['ore'] / 7) if row['ore'] >= 7 else 1
-                cam = attive[(attive['Ruolo'].str.contains('ameriera', case=False, na=False)) & (attive['Zone_Padronanza'].str.contains(row['Hotel'], na=False)) & (~attive['Nome'].isin(assegnate))]
-                if len(cam) < n_nec:
-                    jolly = attive[(attive['Ruolo'].str.contains('ameriera', case=False, na=False)) & (~attive['Nome'].isin(assegnate)) & (~attive['Nome'].isin(cam['Nome']))].sort_values('Rating_Num', ascending=False)
-                    cam = pd.concat([cam, jolly]).head(n_nec)
-                else: cam = cam.head(n_nec)
-                s_icon = [f"{('📌' if len(str(c.get('Zone_Padronanza','')).split(', ')) == 1 else '🔄')} {c['Nome']}" for _, c in cam.iterrows()]
-                assegnate.extend(cam['Nome'].tolist())
-                ris.append({"Zona": row['Hotel'], "Ore": round(row['ore'], 1), "Resp": resp, "Team": ", ".join(s_icon)})
-        if ris: st.table(pd.DataFrame(ris))
+            if st.form_submit_button("💾 SALVA"):
+                # Mappatura campi per il file Housekeeping_DB - Staff.csv 
+                nuova_riga = {
+                    "Nome": f_nome, "Ruolo": f_ruolo, "Professionalita": f_pro, "Esperienza": f_esp,
+                    "Tenuta_Fisica": f_ten, "Disponibilita": f_dis, "Empatia": f_emp,
+                    "Capacita_Guida": f_gui, "Zone_Padronanza": f_zone, "Auto": f_auto
+                }
+                if sel != "--- NUOVO ---":
+                    df = df[df['Nome'] != sel]
+                df = pd.concat([df, pd.DataFrame([nuova_riga])], ignore_index=True)
+                save_staff(df)
+                st.success(f"Scheda di {f_nome} salvata!")
+                st.rerun()
+    else:
+        if sel != "--- NUOVO ---" and st.button("🗑️ ELIMINA DEFINITIVAMENTE"):
+            df = df[df['Nome'] != sel]
+            save_staff(df)
+            st.rerun()
+
+# --- DASHBOARD ---
+df[['Performance', 'Rating_Num']] = df.apply(lambda r: pd.Series(get_rating_bar(r)), axis=1)
+
+st.title("🏆 Dashboard Housekeeping Resort")
+# Visualizzazione basata sulle colonne caricate [cite: 1, 3]
+st.dataframe(df[['Nome', 'Ruolo', 'Performance', 'Zone_Padronanza', 'Auto']].sort_values('Nome'), 
+             use_container_width=True, hide_index=True)
