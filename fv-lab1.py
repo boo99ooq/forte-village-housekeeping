@@ -28,10 +28,13 @@ def load_data():
     if os.path.exists(FILE_STAFF):
         df = pd.read_csv(FILE_STAFF)
         df.columns = [c.strip() for c in df.columns]
-        # Assicuriamo la presenza delle colonne necessarie
-        if 'Part_Time' not in df.columns: df['Part_Time'] = 0
-        if 'Lavora_Bene_Con' not in df.columns: df['Lavora_Bene_Con'] = ""
-        if 'Zone_Padronanza' not in df.columns: df['Zone_Padronanza'] = ""
+        cols_default = {
+            'Part_Time': 0, 'Lavora_Bene_Con': 'Nessuna', 'Zone_Padronanza': '',
+            'Professionalita': 5, 'Esperienza': 5, 'Tenuta_Fisica': 5, 'Capacita_Guida': 5
+        }
+        for col, val in cols_default.items():
+            if col not in df.columns: df[col] = val
+        df['Nome'] = df['Nome'].astype(str).str.strip()
         df['Part_Time'] = pd.to_numeric(df['Part_Time'], errors='coerce').fillna(0)
         return df.fillna("")
     return pd.DataFrame()
@@ -64,22 +67,27 @@ def genera_pdf(data_str, schieramento, split_list, lista_assenti):
 
 df = load_data()
 
-# --- SIDEBAR (GESTIONE STAFF) ---
+# --- SIDEBAR COMPLETA ---
 with st.sidebar:
-    st.header("👤 Staff")
+    st.header("👤 Gestione Staff")
     nomi_db = sorted(df['Nome'].unique().tolist()) if not df.empty else []
-    sel_nome = st.selectbox("Cerca/Modifica:", ["--- NUOVO ---"] + nomi_db)
+    sel_nome = st.selectbox("Collaboratrice:", ["--- NUOVO ---"] + nomi_db)
     curr = df[df['Nome'] == sel_nome].iloc[0] if sel_nome != "--- NUOVO ---" else None
     
     with st.form("form_staff"):
         f_n = st.text_input("Nome", value=str(curr['Nome']) if curr is not None else "")
         f_r = st.selectbox("Ruolo", ["Cameriera", "Governante"], index=1 if curr is not None and "overnante" in str(curr['Ruolo']).lower() else 0)
-        f_zn = st.multiselect("Zone Padronanza", lista_hotel, default=[z.strip() for z in str(curr['Zone_Padronanza']).split(",")] if curr is not None and curr['Zone_Padronanza'] else [])
+        f_zn = st.multiselect("Padronanza", lista_hotel, default=[z.strip() for z in str(curr['Zone_Padronanza']).split(",")] if curr is not None and curr['Zone_Padronanza'] else [])
         f_pt = st.checkbox("🕒 Part-Time", value=bool(curr.get('Part_Time', 0)) if curr is not None else False)
-        f_lbc = st.selectbox("Lavora Bene Con", ["Nessuna"] + nomi_db, index=nomi_db.index(curr['Lavora_Bene_Con'])+1 if curr is not None and curr['Lavora_Bene_Con'] in nomi_db else 0)
+        f_lbc = st.selectbox("Partner Preferito", ["Nessuna"] + nomi_db, index=nomi_db.index(curr['Lavora_Bene_Con'])+1 if curr is not None and curr['Lavora_Bene_Con'] in nomi_db else 0)
+        
+        st.write("**Valutazioni (1-10)**")
+        f_prof = st.slider("Professionalità", 1, 10, int(curr['Professionalita']) if curr is not None else 5)
+        f_esp = st.slider("Esperienza", 1, 10, int(curr['Esperienza']) if curr is not None else 5)
+        f_guid = st.slider("Capacità Guida", 1, 10, int(curr['Capacita_Guida']) if curr is not None else 5)
         
         if st.form_submit_button("💾 SALVA SCHEDA"):
-            nuova = {"Nome": f_n, "Ruolo": f_r, "Zone_Padronanza": ", ".join(f_zn), "Part_Time": 1 if f_pt else 0, "Lavora_Bene_Con": f_lbc}
+            nuova = {"Nome": f_n.strip(), "Ruolo": f_r, "Zone_Padronanza": ", ".join(f_zn), "Part_Time": 1 if f_pt else 0, "Lavora_Bene_Con": f_lbc, "Professionalita": f_prof, "Esperienza": f_esp, "Capacita_Guida": f_guid}
             df = df[df['Nome'] != sel_nome] if curr is not None else df
             df = pd.concat([df, pd.DataFrame([nuova])], ignore_index=True)
             save_data(df); st.rerun()
@@ -101,7 +109,7 @@ with t2:
         fi = cols[2].number_input(f"FI {h}", 5, 120, m_fi, key=f"t_fi_{h}")
         new_c.append({"Hotel": h, "Arr_Ind": ai, "Fer_Ind": fi})
     if st.button("💾 Salva Tempi"):
-        pd.DataFrame(new_c).to_csv(FILE_CONFIG, index=False); st.success("Tempi salvati!")
+        pd.DataFrame(new_c).to_csv(FILE_CONFIG, index=False); st.success("Salvati!")
 
 with t3:
     st.header("🚀 Planning")
@@ -110,7 +118,6 @@ with t3:
     assenti = col_a.multiselect("🛌 Assenti/Riposi:", nomi_db)
     
     st.write("### 📊 Carico Lavoro")
-    # Layout a 6 colonne ottimizzato
     h_col = st.columns([2, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8])
     h_col[0].write("**HOTEL**"); h_col[1].write("**Arr I**"); h_col[2].write("**Ferm I**"); h_col[3].write("**Arr G**"); h_col[4].write("**Ferm G**"); h_col[5].write("**Cop**"); h_col[6].write("**Bian**")
 
@@ -118,13 +125,14 @@ with t3:
     for h in lista_hotel:
         r = st.columns([2, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8])
         r[0].write(f"**{h}**")
-        v_ai = r[1].number_input("AI", 0, 100, 0, key=f"v_ai_{h}", label_visibility="collapsed")
-        v_fi = r[2].number_input("FI", 0, 100, 0, key=f"v_fi_{h}", label_visibility="collapsed")
-        v_ag = r[3].number_input("AG", 0, 100, 0, key=f"v_ag_{h}", label_visibility="collapsed")
-        v_fg = r[4].number_input("FG", 0, 100, 0, key=f"v_fg_{h}", label_visibility="collapsed")
-        v_co = r[5].number_input("CO", 0, 100, 0, key=f"v_co_{h}", label_visibility="collapsed")
-        v_bi = r[6].number_input("BI", 0, 100, 0, key=f"v_bi_{h}", label_visibility="collapsed")
-        cur_inp[h] = {"AI": v_ai, "FI": v_fi, "AG": v_ag, "FG": v_fg, "CO": v_co, "BI": v_bi}
+        cur_inp[h] = {
+            "AI": r[1].number_input("AI", 0, 100, 0, key=f"v_ai_{h}", label_visibility="collapsed"),
+            "FI": r[2].number_input("FI", 0, 100, 0, key=f"v_fi_{h}", label_visibility="collapsed"),
+            "AG": r[3].number_input("AG", 0, 100, 0, key=f"v_ag_{h}", label_visibility="collapsed"),
+            "FG": r[4].number_input("FG", 0, 100, 0, key=f"v_fg_{h}", label_visibility="collapsed"),
+            "CO": r[5].number_input("COP", 0, 100, 0, key=f"v_co_{h}", label_visibility="collapsed"),
+            "BI": r[6].number_input("BIA", 0, 100, 0, key=f"v_bi_{h}", label_visibility="collapsed")
+        }
 
     if st.button("🚀 GENERA SCHIERAMENTO", use_container_width=True):
         conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
@@ -139,11 +147,8 @@ with t3:
                 t_r = conf_df[conf_df['Hotel'] == h]
                 if not t_r.empty: m_ai, m_fi = t_r.iloc[0].get('Arr_Ind', 60), t_r.iloc[0].get('Fer_Ind', 30)
             
-            # Calcolo ore (Gruppi pesano 80%)
-            ore_i = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi)
-            ore_g = (cur_inp[h]["AG"]*(m_ai*0.8) + cur_inp[h]["FG"]*(m_fi*0.8))
-            extra = (cur_inp[h]["CO"]*20 + cur_inp[h]["BI"]*15)
-            fabb[h] = (ore_i + ore_g + extra) / 60
+            val_f = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["AG"]*(m_ai*0.8) + cur_inp[h]["FG"]*(m_fi*0.8) + cur_inp[h]["CO"]*20 + cur_inp[h]["BI"]*15) / 60
+            fabb[h] = val_f
         
         fabb["MACRO: PALME & GARDEN"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
         z_ordine = ["Hotel Castello", "Hotel Castello 4 Piano", "MACRO: PALME & GARDEN"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
@@ -151,12 +156,12 @@ with t3:
         gia_a, ris = set(), []
         for zona in z_ordine:
             o_n, t_h, o_f = fabb.get(zona, 0), [], 0
-            # Governanti
+            # Gov
             gov = attive[(attive['Ruolo'] == 'Governante') & (~attive['Nome'].isin(gia_a))]
             mask_g = gov['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)
             for _, g in gov[mask_g].iterrows():
                 t_h.append(f"⭐ {g['Nome']} (Gov.)"); gia_a.add(g['Nome'])
-            # Cameriere
+            # Cam
             if o_n > 0 or zona in ["Hotel Castello", "Hotel Castello 4 Piano"]:
                 cand = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
                 cand['Pr'] = cand['Zone_Padronanza'].apply(lambda x: 0 if zona.replace("Hotel ", "").lower() in str(x).lower() else 1)
@@ -166,45 +171,36 @@ with t3:
                     if o_f < (o_n if o_n > 0 else 7.5):
                         t_h.append(p['Nome']); gia_a.add(p['Nome'])
                         o_f += 5.0 if (p['Part_Time'] == 1 or p['Nome'] in pool_spl) else 7.5
-                        # Compagna preferita
                         c_pref = str(p.get('Lavora_Bene_Con', '')).strip()
                         if c_pref and c_pref in attive['Nome'].values and c_pref not in gia_a:
                             t_h.append(c_pref); gia_a.add(c_pref)
                             p_c = attive[attive['Nome'] == c_pref].iloc[0]
                             o_f += 5.0 if (p_c['Part_Time'] == 1 or c_pref in pool_spl) else 7.5
                     else: break
-            # Pareggio numero pari
             if t_h and len(t_h) % 2 != 0:
                 rest = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))]
                 if not rest.empty:
-                    rinf = rest.iloc[0]['Nome']
-                    t_h.append(rinf); gia_a.add(rinf)
+                    rinf = rest.iloc[0]['Nome']; t_h.append(rinf); gia_a.add(rinf)
             if t_h: ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Req": round(o_n, 1)})
         st.session_state['res_v_fin'] = ris
 
-    # --- VISUALIZZAZIONE RISULTATI ---
     if 'res_v_fin' in st.session_state:
         st.divider()
         t_attive = set(n for n in nomi_db if n not in assenti)
         spl = st.session_state.get('spl_v_fin', [])
-        
-        # Calcolo panchina
         t_scelti = set()
         for i in range(len(st.session_state['res_v_fin'])):
             key = f"edt_f_{i}"
             val = st.session_state.get(key, [n.strip() for n in st.session_state['res_v_fin'][i].get('Team', '').split(",") if n.strip()])
             t_scelti.update([n.replace("⭐ ", "").replace(" (Gov.)", "").replace("🕒 ", "").replace("🌙 ", "").strip() for n in val])
-        
         v_libere = sorted(list(t_attive - t_scelti))
         st.metric("🏃 In Panchina", len(v_libere))
-        with st.expander("Vedi Panchina"): st.write(", ".join(v_libere) if v_libere else "Nessuna")
 
         final_list = []
         for i, r in enumerate(st.session_state['res_v_fin']):
             key = f"edt_f_{i}"
             raw = st.session_state.get(key, [n.strip() for n in r.get('Team', '').split(",") if n.strip()])
             pul = [n.replace("⭐ ", "").replace(" (Gov.)", "").replace("🕒 ", "").replace("🌙 ", "").strip() for n in raw]
-            
             c_ft, c_pt, c_spl, c_gov, o_cop = 0, 0, 0, 0, 0
             nomi_icon = []
             for n_p in pul:
@@ -212,33 +208,31 @@ with t3:
                 if not m.empty:
                     row = m.iloc[0]
                     is_pt, is_spl = row['Part_Time'] == 1, n_p in spl
-                    if "overnante" in str(row['Ruolo']).lower(): 
-                        c_gov += 1; nomi_icon.append(f"⭐ {n_p} (Gov.)")
+                    if "overnante" in str(row['Ruolo']).lower(): c_gov += 1; nomi_icon.append(f"⭐ {n_p} (Gov.)")
                     elif is_spl: c_spl += 1; o_cop += 5.0; nomi_icon.append(f"🌙 {n_p}")
                     elif is_pt: c_pt += 1; o_cop += 5.0; nomi_icon.append(f"🕒 {n_p}")
                     else: c_ft += 1; o_cop += 7.5; nomi_icon.append(n_p)
             
             diff = round(o_cop - r.get('Req', 0), 1)
             b_str = f"✅ OK (+{diff}h)" if diff >= 0 else f"⚠️ SOTTO ({diff}h)"
-            
             with st.expander(f"📍 {r['Hotel']} | {b_str}"):
-                st.write(f"👥 **{len(pul)} persone** ({c_ft} Full, {c_pt} 🕒, {c_spl} 🌙, {c_gov} ⭐) | Fabbisogno: {r.get('Req', 0)}h")
+                st.write(f"👥 **{len(pul)} persone** ({c_ft} Full, {c_pt} 🕒, {c_spl} 🌙, {c_gov} ⭐) | Req: {r.get('Req', 0)}h")
                 opts_p = sorted(list(set(pul) | set(v_libere)))
                 opts_l = []
                 for o in opts_p:
-                    m_o = df[df['Nome'] == o].iloc[0]
-                    if "overnante" in str(m_o['Ruolo']).lower(): lbl = f"⭐ {o} (Gov.)"
-                    elif o in spl: lbl = f"🌙 {o}"
-                    elif m_o['Part_Time'] == 1: lbl = f"🕒 {o}"
-                    else: lbl = o
-                    opts_l.append(lbl)
-                
+                    m_o = df[df['Nome'] == o]
+                    if not m_o.empty:
+                        row_o = m_o.iloc[0]
+                        if "overnante" in str(row_o['Ruolo']).lower(): lbl = f"⭐ {o} (Gov.)"
+                        elif o in spl: lbl = f"🌙 {o}"
+                        elif row_o['Part_Time'] == 1: lbl = f"🕒 {o}"
+                        else: lbl = o
+                        opts_l.append(lbl)
                 scelta = st.multiselect(f"Team {r['Hotel']}", opts_l, default=nomi_icon, key=key)
                 final_list.append({"Hotel": r['Hotel'], "Team": ", ".join(scelta)})
 
         st.subheader("🌙 Coperture Serali")
-        st.info(f"Personale assegnato (Turno 19-22): {', '.join(spl)}")
-        
+        st.info(f"Assegnate: {', '.join(spl)}")
         if st.button("🧊 SCARICA PDF"):
             pdf = genera_pdf(data_p.strftime("%d/%m/%Y"), final_list, spl, assenti)
-            st.download_button("📥 DOWNLOAD PLANNING", pdf, f"Planning_{data_p}.pdf")
+            st.download_button("📥 DOWNLOAD", pdf, f"Planning_{data_p}.pdf")
