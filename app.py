@@ -72,10 +72,14 @@ def genera_pdf(data_str, schieramento, split_list):
 df = load_data()
 lista_hotel = ["Hotel Castello", "Hotel Castello Garden", "Castello 4 Piano", "Cala del Forte", "Le Dune", "Villa del Parco", "Hotel Pineta", "Bouganville", "Le Palme", "Il Borgo", "Le Ville", "Spazi Comuni"]
 
-# --- SIDEBAR COMPLETA ---
+# --- SIDEBAR COMPLETA (CON MENU A TENDINA) ---
 with st.sidebar:
     st.header("👤 Gestione Staff")
-    sel = st.selectbox("Seleziona collaboratore:", ["--- NUOVO ---"] + sorted(df['Nome'].tolist()) if not df.empty else ["--- NUOVO ---"])
+    
+    # Carichiamo la lista nomi per i menu a tendina
+    lista_nomi = sorted(df['Nome'].tolist()) if not df.empty else []
+    
+    sel = st.selectbox("Seleziona collaboratore:", ["--- NUOVO ---"] + lista_nomi)
     current = df[df['Nome'] == sel].iloc[0] if sel != "--- NUOVO ---" else None
 
     with st.form("form_staff"):
@@ -86,8 +90,16 @@ with st.sidebar:
         f_pt = c_opt[0].checkbox("🕒 Part-Time", value=bool(current['Part_Time']) if current is not None else False)
         f_indisp = c_opt[1].checkbox("🚫 No Spezzato", value=bool(current['Indisp_Spezzato']) if current is not None else False)
         
-        f_auto = st.text_input("Viaggia con...", value=str(current['Auto']) if current is not None else "")
-        f_zone = st.text_input("Zone Padronanza", value=str(current['Zone_Padronanza']) if current is not None else "")
+        # --- MENU A TENDINA: VIAGGIA CON ---
+        opzioni_auto = ["Auto Propria / Nessuno"] + [n for n in lista_nomi if n != f_nome]
+        v_attuale = str(current['Auto']) if current is not None and str(current['Auto']) != "0" else "Auto Propria / Nessuno"
+        idx_auto = opzioni_auto.index(v_attuale) if v_attuale in opzioni_auto else 0
+        f_auto = st.selectbox("Viaggia con...", opzioni_auto, index=idx_auto)
+        
+        # --- MENU A TENDINA: ZONA PADRONANZA ---
+        z_attuale = str(current['Zone_Padronanza']) if current is not None else lista_hotel[0]
+        idx_zona = lista_hotel.index(z_attuale) if z_attuale in lista_hotel else 0
+        f_zone = st.selectbox("Zona Padronanza Principale", lista_hotel, index=idx_zona)
         
         st.write("**Valutazioni (1-10)**")
         col1, col2 = st.columns(2)
@@ -99,12 +111,24 @@ with st.sidebar:
         v_gui = col2.number_input("Guida", 1, 10, int(current['Capacita_Guida']) if current is not None else 5)
 
         if st.form_submit_button("💾 SALVA SCHEDA"):
-            nuova_d = {"Nome": f_nome, "Ruolo": f_ruolo, "Part_Time": 1 if f_pt else 0, "Indisp_Spezzato": 1 if f_indisp else 0, 
-                       "Auto": f_auto, "Zone_Padronanza": f_zone, "Professionalita": v_pro, "Esperienza": v_esp, 
-                       "Tenuta_Fisica": v_ten, "Disponibilita": v_dis, "Empatia": v_emp, "Capacita_Guida": v_gui}
-            if current is not None: df = df[df['Nome'] != sel]
+            # Pulizia dato auto se selezionato default
+            auto_salva = f_auto if f_auto != "Auto Propria / Nessuno" else ""
+            
+            nuova_d = {
+                "Nome": f_nome, "Ruolo": f_ruolo, "Part_Time": 1 if f_pt else 0, 
+                "Indisp_Spezzato": 1 if f_indisp else 0, "Auto": auto_salva, 
+                "Zone_Padronanza": f_zone, "Professionalita": v_pro, 
+                "Esperienza": v_esp, "Tenuta_Fisica": v_ten, 
+                "Disponibilita": v_dis, "Empatia": v_emp, "Capacita_Guida": v_gui
+            }
+            
+            if current is not None: 
+                df = df[df['Nome'] != sel]
+            
             df = pd.concat([df, pd.DataFrame([nuova_d])], ignore_index=True)
-            save_data(df); st.rerun()
+            save_data(df)
+            st.success(f"Scheda di {f_nome} salvata!")
+            st.rerun()
 
 # --- TABS ---
 t1, t2, t3, t4 = st.tabs(["🏆 Dashboard", "⚙️ Tempi", "🚀 Planning", "📅 Storico"])
