@@ -130,10 +130,13 @@ with t2:
 
 with t3:
     st.header("🚀 Elaborazione Planning")
-    data_p = st.date_input("Data:", datetime.now())
-    assenti = st.multiselect("🛌 Assenti/Riposi:", lista_nomi)
+    
+    col_d, col_a = st.columns([1, 2])
+    data_p = col_d.date_input("Data:", datetime.now())
+    assenti = col_a.multiselect("🛌 Assenti/Riposi:", lista_nomi)
     
     st.write("### 📊 Inserimento Carico Lavoro")
+    # Griglia orizzontale senza st.form per calcoli immediati
     cur_inp = {}
     h_col = st.columns([2, 1, 1, 1, 1])
     h_col[0].write("**Hotel**"); h_col[1].write("AI"); h_col[2].write("FI"); h_col[3].write("COP"); h_col[4].write("BIA")
@@ -141,11 +144,90 @@ with t3:
     for h in lista_hotel:
         row_c = st.columns([2, 1, 1, 1, 1])
         row_c[0].write(f"**{h}**")
-        p_ai = row_c[1].number_input("", 0, 100, 0, key=f"ai_{h}", label_visibility="collapsed")
-        p_fi = row_c[2].number_input("", 0, 100, 0, key=f"fi_{h}", label_visibility="collapsed")
-        p_cop = row_c[3].number_input("", 0, 100, 0, key=f"cop_{h}", label_visibility="collapsed")
-        p_bia = row_c[4].number_input("", 0, 100, 0, key=f"bia_{h}", label_visibility="collapsed")
+        p_ai = row_c[1].number_input("", 0, 100, 0, key=f"p_ai_{h}", label_visibility="collapsed")
+        p_fi = row_c[2].number_input("", 0, 100, 0, key=f"p_fi_{h}", label_visibility="collapsed")
+        p_cop = row_c[3].number_input("", 0, 100, 0, key=f"p_cop_{h}", label_visibility="collapsed")
+        p_bia = row_c[4].number_input("", 0, 100, 0, key=f"p_bia_{h}", label_visibility="collapsed")
         cur_inp[h] = {"AI": p_ai, "FI": p_fi, "COP": p_cop, "BIA": p_bia}
+
+    # Pulsante di azione unico fuori dai form
+    if st.button("🚀 GENERA SCHIERAMENTO"):
+        conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
+        attive = df[(~df['Nome'].isin(assenti))].copy()
+        
+        # 1. Identificazione Spezzati (solo cameriere)
+        pool_split = attive[(attive['Part_Time'] == 0) & (attive['Indisp_Spezzato'] == 0) & (attive['Ruolo'] == 'Cameriera')].sort_values('Conteggio_Spezzati').head(4)['Nome'].tolist()
+        
+        def calc_ore(hotel_nome):
+            t = conf_df[conf_df['Hotel'] == hotel_nome].iloc[0] if not conf_df.empty else {"Arr_Ind":60, "Fer_Ind":30}
+            base = (cur_inp[hotel_nome]["AI"]*t["Arr_Ind"] + cur_inp[hotel_nome]["FI"]*t["Fer_Ind"])
+            extra = (cur_inp[hotel_nome]["COP"]*(t["Fer_Ind"]/3) + cur_inp[hotel_nome]["BIA"]*(t["Fer_Ind"]/4))
+            return (base + extra) / 60
+
+        fabbisogni = {h: calc_ore(h) for h in lista_hotel}
+        fabbisogni["MACRO: PALME & GARDEN"] = fabbisogni.get("Le Palme", 0) + fabbisogni.get("Hotel Castello Garden", 0)
+        
+        zone_lavoro = [h for h in lista_hotel if h not in ["Le Palme", "Hotel Castello Garden"]] + ["MACRO: PALME & GARDEN"]
+        
+        gia_ass, ris = [], []
+        
+        for zona in zone_lavoro:
+            ore_nec = fabbisogni.get(zona, 0)
+            team_h, ore_f = [], 0
+            
+            # --- ASSEGNAZIONE GOVERNANTE (Logica Flessibile) ---
+            gov_zona = attive[
+                (attive['Ruolo'] == 'Governante') & 
+                (~attive['Nome'].isin(gia_ass)) & 
+                (attive['Zone_Padronanza'].apply(lambda x: str(x).lower() in zona.lower() or zona.lower() in str(x).lower()))
+            ]
+            for _, g in gov_zona.iterrows():
+                team_h.append(f"⭐ {g['Nome']} (Gov.)")
+                gia_ass.append(g['Nome'])
+
+            # --- ASSEGNAZIONE CAMERIERE ---
+            if ore_nec > 0:
+                cand = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_ass))].copy()
+                cand['Priorita'] = cand['Zone_Padronanza'].apply(lambda x: 0 if (str(x).lower() in zona.lower() or zona.lower() in str(x).lower()) else 1)
+                cand = cand.sort_values(['Priorita', 'Rating_Num'], ascending=[True, False])
+                
+                for _, p in cand.iterrows():
+                    if ore_f < ore_nec:
+                        team_h.append(p['Nome'])
+                        gia_ass.append(p['Nome'])
+                        ore_f += 5.0 if (p['Part_Time'] == 1 or p['Nome'] in pool_split) else 7.5
+                    else:
+                        break
+            
+            if team_h:
+                ris.append({"Hotel": zona, "Team": ", ".join(team_h), "Ore Nec": round(ore_nec, 1)})
+        
+        st.session_state['res'] = ris
+        st.session_state['spl'] = pool_split
+        st.session_state['libere'] = list(set(attive[attive['Ruolo']=='Cameriera']['Nome']) - set(gia_ass))
+
+    # --- VISUALIZZAZIONE E MODIFICA ---
+    if 'res' in st.session_state:
+        st.divider()
+        final_list = []
+        attive_all = df[(~df['Nome'].isin(assenti))]
+        
+        for i, r in enumerate(st.session_state['res']):
+            with st.expander(f"📍 {r['Hotel']} (Fabbisogno: {r['Ore Nec']}h)"):
+                current_t = [n.strip() for n in r['Team'].split(",")]
+                opzioni = sorted(list(set(current_t) | set(st.session_state['libere'])))
+                edit_t = st.multiselect(f"Team {r['Hotel']}", opzioni, default=current_t, key=f"ed_{r['Hotel']}_{i}")
+                
+                # Calcolo ore dinamico
+                ore_check = sum([5.0 if (df[df['Nome']==n.replace('⭐ ','').replace(' (Gov.)','')].iloc[0]['Part_Time']==1 or n.replace('⭐ ','').replace(' (Gov.)','') in st.session_state['spl']) else 7.5 for n in edit_t if '(Gov.)' not in n])
+                if ore_check < r['Ore Nec']: st.warning(f"Mancano {round(r['Ore Nec']-ore_check,1)}h")
+                else: st.success(f"Coperto! ({round(ore_check,1)}h)")
+                
+                final_list.append({"Hotel": r['Hotel'], "Team": ", ".join(edit_t)})
+        
+        if st.button("🧊 CRISTALLIZZA E SCARICA PDF"):
+            pdf = genera_pdf(data_p.strftime("%d/%m/%Y"), final_list, st.session_state['spl'], assenti)
+            st.download_button("📥 CLICCA QUI PER SCARICARE", pdf, f"Planning_{data_p}.pdf", "application/pdf")
 
     if st.button("🚀 GENERA SCHIERAMENTO"):
         conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
