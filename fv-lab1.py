@@ -254,68 +254,44 @@ with t_tempi:
             
             attive = df[~df['Nome'].isin(assenti)].copy()
             pool_spl = attive[attive['Ruolo'] == 'Cameriera'].head(4)['Nome'].tolist()
-            st.session_state['spl_v_fin'] = pool_spl
-            
-            fabb = {}
-            for h in lista_hotel:
-                m = conf_df[conf_df['HOTEL'] == h.upper()] if not conf_df.empty else pd.DataFrame()
-                if not m.empty:
-                    m_ai = m.iloc[0].get('AI', 60); m_fi = m.iloc[0].get('FI', 30)
-                    m_ag = m.iloc[0].get('AG', 45); m_fg = m.iloc[0].get('FG', 25)
-                else: m_ai, m_fi, m_ag, m_fg = 60, 30, 45, 25
-                
-                # Calcolo automatico COP (1/3 FI) e BIANC (1/4 FI)
-                t_cop = (m_fi / 3) * cur_inp[h]["COP"]
-                t_bian = (m_fi / 4) * cur_inp[h]["BIAN"]
-                
-                fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["AG"]*m_ag + cur_inp[h]["FG"]*m_fg + t_cop + t_bian) / 60
-            
-            fabb["MACRO: PALME & GARDEN"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
-            z_ord = ["Hotel Castello", "Hotel Castello 4 Piano", "MACRO: PALME & GARDEN"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
-            
-            gia_a, ris = set(), []
-            for zona in z_ord:
-                o_n, t_h, o_f = fabb.get(zona, 0), [], 0
-                
-                # ⭐ Governanti
-                gov = attive[(attive['Ruolo'] == 'Governante') & (~attive['Nome'].isin(gia_a))]
-                mask_g = gov['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)
-                for _, g in gov[mask_g].iterrows():
-                    t_h.append(f"⭐ {g['Nome']} (Gov.)"); gia_a.add(g['Nome'])
-                
-                # Cameriere
-                if o_n > 0 or zona in ["Hotel Castello", "Hotel Castello 4 Piano"]:
-                    cand = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
-                    cand['Pr'] = cand['Zone_Padronanza'].apply(lambda x: 0 if zona.replace("Hotel ", "").lower() in str(x).lower() else 1)
-                    for _, p in cand.sort_values('Pr').iterrows():
-                        if p['Nome'] in gia_a: continue
-                        if o_f < (o_n if o_n > 0 else 7.5):
-                            is_spl, is_pt = p['Nome'] in pool_spl, p['Part_Time'] == 1
-                            ico = "🌙 " if is_spl else ("🕒 " if is_pt else "")
-                            t_h.append(f"{ico}{p['Nome']}"); gia_a.add(p['Nome'])
-                            o_f += 5.0 if (is_pt or is_spl) else 7.5
-                        else: break
-                
-                if t_h:
-                    n_gov = len([n for n in t_h if "⭐" in n])
-                    n_spl = len([n for n in t_h if "🌙" in n])
-                    n_pt = len([n for n in t_h if "🕒" in n])
-                    n_std = len(t_h) - n_gov - n_spl - n_pt
-                    info_txt = f"G:{n_gov} Std:{n_std} 🕒:{n_pt} 🌙:{n_spl}"
-                    ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Req": round(o_n, 1), "Info": info_txt})
-            
-            st.session_state['res_v_fin'] = ris
-            st.rerun()
-    
-        if 'res_v_fin' in st.session_state:
-            st.divider()
-            final_l = []
-            for i, r in enumerate(st.session_state['res_v_fin']):
-                with st.expander(f"📍 {r['Hotel']} | {r.get('Info','')} | {r['Req']}h"):
-                    def_p = [n.replace("⭐ ", "").replace(" (Gov.)", "").replace("🌙 ", "").replace("🕒 ", "").strip() for n in r['Team'].split(",")]
-                    s = st.multiselect(f"Modifica {r['Hotel']}", nomi_db, default=def_p, key=f"e_{i}")
-                    final_l.append({"Hotel": r['Hotel'], "Team": ", ".join(s)})
-            
-            if st.button("🧊 SCARICA PDF"):
-                pdf = genera_pdf_planning(data_p_str, final_l, st.session_state.get('spl_v_fin', []), assenti)
-                st.download_button("📥 DOWNLOAD", pdf, f"Planning_{data_p}.pdf")
+            # Salva i risultati e forza il ricaricamento
+        st.session_state['res_v_fin'] = ris
+        st.rerun()
+
+    # --- VISUALIZZAZIONE RISULTATI ---
+    if 'res_v_fin' in st.session_state:
+        st.divider()
+        final_l = []
+        
+        # 1. Riquadro Cameriere NON Assegnate (Pool)
+        tutte_nomi = set(attive[attive['Ruolo'] == 'Cameriera']['Nome'])
+        assegnate = set()
+        for r in st.session_state['res_v_fin']:
+            nomi_p = [n.replace("🌙 ", "").replace("🕒 ", "").strip() for n in r['Team'].split(", ") if "Gov." not in n]
+            assegnate.update(nomi_p)
+        
+        rimaste = sorted(list(tutte_nomi - assegnate))
+        c1, c2 = st.columns(2)
+        with c1:
+            st.warning(f"🛌 Cameriere Disponibili/Non Assegnate ({len(rimaste)})")
+            st.write(", ".join(rimaste) if rimaste else "Tutte assegnate")
+        
+        with c2:
+            spl_list = st.session_state.get('spl_v_fin', [])
+            st.error(f"🌙 Cameriere in Spezzato ({len(spl_list)})")
+            st.write(", ".join(spl_list))
+
+        st.divider()
+
+        # 2. Elenco Hotel Espandibili
+        for i, r in enumerate(st.session_state['res_v_fin']):
+            with st.expander(f"📍 {r['Hotel']} | {r.get('Info','')} | {r['Req']}h"):
+                # Pulizia per il multiselect
+                def_p = [n.replace("⭐ ", "").replace(" (Gov.)", "").replace("🌙 ", "").replace("🕒 ", "").strip() for n in r['Team'].split(", ")]
+                s = st.multiselect(f"Modifica Team {r['Hotel']}", nomi_db, default=def_p, key=f"e_{i}")
+                final_l.append({"Hotel": r['Hotel'], "Team": ", ".join(s)})
+        
+        # 3. Download PDF
+        if st.button("🧊 SCARICA PDF"):
+            pdf = genera_pdf_planning(data_p_str, final_l, st.session_state.get('spl_v_fin', []), assenti)
+            st.download_button("📥 DOWNLOAD", pdf, f"Planning_{data_p}.pdf")
