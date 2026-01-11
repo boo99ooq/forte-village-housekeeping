@@ -241,7 +241,7 @@ with t_tempi:
             "BIAN": r[6].number_input("BIAN", 0, 100, 0, key=f"p_bi_{h}", label_visibility="collapsed")
         } 
         # --- SALVATAGGIO DATI ZONA ---
-            if t_h:
+        if t_h:
                 n_gov = len([n for n in t_h if "⭐" in n])
                 n_spl = len([n for n in t_h if "🌙" in n])
                 n_pt = len([n for n in t_h if "🕒" in n])
