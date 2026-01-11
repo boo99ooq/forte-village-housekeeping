@@ -284,7 +284,7 @@ with t_plan:
         pool_spl = attive[attive['Ruolo'] == 'Cameriera'].head(4)['Nome'].tolist()
         st.session_state['spl_v_fin'] = pool_spl
         
-       conf_df.columns = conf_df.columns.str.strip().str.upper()
+        conf_df.columns = conf_df.columns.str.strip().str.upper()
         fabb = {}
         for h in lista_hotel:
             m = conf_df[conf_df['HOTEL'] == h]
