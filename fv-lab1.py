@@ -215,20 +215,27 @@ with t_tempi:
     if st.button("💾 Salva Tempi"):
         pd.DataFrame(new_c).to_csv(FILE_CONFIG, index=False)
         st.success("Tempi salvati correttamente!")
-with t_plan:
-    st.header("🚀 Generazione Planning")
-    c_d, c_a = st.columns([1, 2])
-    data_p = c_d.date_input("Data Planning:", datetime.now(), format="DD/MM/YYYY")
-    data_p_str = data_p.strftime("%d/%m/%Y")
-    giorno_sett_p = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"][data_p.weekday()]
-    
-    suggeriti = [r['Nome'] for _, r in df.iterrows() if r.get('Riposo_Pref') in [giorno_sett_p, data_p_str]] if not df.empty else []
-    assenti = c_a.multiselect("🛌 Assenti/Riposi:", nomi_db, default=suggeriti)
-    
-    cur_inp = {}
-    for h in lista_hotel:
-        r = st.columns([2, 1, 1, 1, 1])
-        r[0].write(f"**{h}**")
+# Questo è il blocco corretto da riga 239 in poi
+    with t_plan:
+        st.header("🚀 Generazione Planning")
+        # ... (qui metti i campi data e assenti) ...
+
+        # LE INTESTAZIONI DEVONO ESSERE SPOSTATE A DESTRA RISPETTO A 'WITH'
+        hp = st.columns([2, 1, 1, 1, 1, 1, 1])
+        hp[0].write("**ALBERGO**")
+        hp[1].write("**ARR I**")
+        hp[2].write("**FERM I**")
+        hp[3].write("**ARR G**")
+        hp[4].write("**FERM G**")
+        hp[5].write("**COP**")
+        hp[6].write("**BIANC**")
+
+        cur_inp = {}
+        for h in lista_hotel:
+            # ANCHE QUESTO DEVE ESSERE ALLINEATO A DESTRA
+            r = st.columns([2, 1, 1, 1, 1, 1, 1])
+            r[0].write(f"**{h}**")
+            # ... resto del codice ...
         cur_inp[h] = {
             "AI": r[1].number_input("AI", 0, 100, 0, key=f"p_ai_{h}", label_visibility="collapsed"),
             "FI": r[2].number_input("FI", 0, 100, 0, key=f"p_fi_{h}", label_visibility="collapsed"),
