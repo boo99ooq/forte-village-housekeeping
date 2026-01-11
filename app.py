@@ -55,25 +55,27 @@ with st.sidebar:
         f_nome = st.text_input("Nome", value=str(current['Nome']) if current is not None else "")
         f_ruolo = st.selectbox("Ruolo", ["Cameriera", "Governante"], 
                                index=0 if current is None or "Cameriera" in str(current['Ruolo']) else 1)
-        # --- LOGICA AUTO CON MENU A TENDINA ---
-        lista_auto_esistenti = sorted([a for a in df['Auto'].unique() if str(a).strip() != "" and str(a).lower() != "nan"])
-        opzioni_auto = ["Nessuna"] + lista_auto_esistenti + ["+ AGGIUNGI NUOVA..."]
+        # --- LOGICA "VIAGGIA CON..." ---
+        st.write("--- Trasporti ---")
         
-        auto_attuale = str(current['Auto']) if current is not None else "Nessuna"
+        # Recuperiamo tutti i nomi delle cameriere per il menu
+        lista_nomi = sorted(df['Nome'].tolist())
+        opzioni_viaggio = ["Nessuna / Auto Propria"] + lista_nomi + ["+ AGGIUNGI ALTRO..."]
         
-        # Se l'auto attuale non è nella lista (caso raro), la aggiungiamo
-        if auto_attuale != "nan" and auto_attuale != "" and auto_attuale not in opzioni_auto:
-            opzioni_auto.insert(1, auto_attuale)
+        # Vediamo con chi viaggia attualmente
+        viaggio_attuale = str(current['Auto']) if current is not None and str(current['Auto']) != "nan" else "Nessuna / Auto Propria"
+        if viaggio_attuale == "": viaggio_attuale = "Nessuna / Auto Propria"
 
-        scelta_auto = st.selectbox("Seleziona Auto:", opzioni_auto, 
-                                   index=opzioni_auto.index(auto_attuale) if auto_attuale in opzioni_auto else 0)
+        # Menu a tendina con i nomi delle colleghe
+        scelta_viaggio = st.selectbox("Viaggia con:", opzioni_viaggio, 
+                                      index=opzioni_viaggio.index(viaggio_attuale) if viaggio_attuale in opzioni_viaggio else 0)
         
-        if scelta_auto == "+ AGGIUNGI NUOVA...":
-            f_auto = st.text_input("Scrivi il nome della nuova auto/mezzo:")
-        elif scelta_auto == "Nessuna":
+        if scelta_viaggio == "+ AGGIUNGI ALTRO...":
+            f_auto = st.text_input("Inserisci nome o mezzo esterno:")
+        elif scelta_viaggio == "Nessuna / Auto Propria":
             f_auto = ""
         else:
-            f_auto = scelta_auto
+            f_auto = scelta_viaggio
         f_zone = st.text_input("Zone Padronanza", value=str(current['Zone_Padronanza']) if current is not None else "")
         
         st.write("--- Valutazioni (1-10) ---")
