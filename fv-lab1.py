@@ -191,7 +191,7 @@ with t_staff:
             
             # Il calendario è sempre visibile per evitare blocchi del form, 
             # ma lo usiamo solo se il tipo è DATA SPECIFICA
-            f_data_s = st.date_input("Calendario (solo per Data Specifica)", data_default)
+            f_data_s = st.date_input("Seleziona data", d_def, format="DD/MM/YYYY")
             
             if f_rip_tipo == "DATA SPECIFICA":
                 f_rip_final = f_data_s.strftime("%d/%m/%Y")
@@ -254,25 +254,48 @@ with t_tempi:
 
 # --- TAB PLANNING ---
 with t_plan:
-    st.header("🚀 Planning")
+    st.header("🚀 Generazione Planning")
+    
+    # --- LOGICA INTELLIGENTE RIPOSI ---
     c_d, c_a = st.columns([1, 2])
-    data_p = c_d.date_input("Data:", datetime.now())
-    assenti = c_a.multiselect("🛌 Assenti:", nomi_db)
-    st.write("### 📊 Camere")
+    data_p = c_d.date_input("Seleziona Data Planning:", datetime.now(), format="DD/MM/YYYY")
+    
+    # Prepariamo i confronti per i riposi
+    data_p_str = data_p.strftime("%d/%m/%Y")
+    giorni_ita = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+    giorno_sett_p = giorni_ita[data_p.weekday()]
+
+    # Identifichiamo chi dovrebbe riposare oggi
+    suggeriti_assenti = []
+    if not df.empty:
+        for _, row in df.iterrows():
+            rip_salvato = str(row.get('Riposo_Pref', ''))
+            if rip_salvato == giorno_sett_p or rip_salvato == data_p_str:
+                suggeriti_assenti.append(row['Nome'])
+
+    # Multiselect con pre-caricamento dei riposi
+    assenti = c_a.multiselect("🛌 Assenti/Riposi del giorno:", nomi_db, default=suggeriti_assenti)
+    
+    st.write("### 📊 Inserimento Quantità Camere")
     h_col = st.columns([2, 1, 1, 1, 1])
     h_col[0].write("**HOTEL**"); h_col[1].write("**Arr I**"); h_col[2].write("**Ferm I**"); h_col[3].write("**Arr G**"); h_col[4].write("**Ferm G**")
+    
     cur_inp = {}
     for h in lista_hotel:
         r = st.columns([2, 1, 1, 1, 1])
         r[0].write(f"**{h}**")
-        cur_inp[h] = {"AI": r[1].number_input("AI", 0, 100, 0, key=f"p_ai_{h}", label_visibility="collapsed"),
-                      "FI": r[2].number_input("FI", 0, 100, 0, key=f"p_fi_{h}", label_visibility="collapsed"),
-                      "AG": r[3].number_input("AG", 0, 100, 0, key=f"p_ag_{h}", label_visibility="collapsed"),
-                      "FG": r[4].number_input("FG", 0, 100, 0, key=f"p_fg_{h}", label_visibility="collapsed")}
-    
-    if st.button("🚀 GENERA SCHIERAMENTO", use_container_width=True):
+        cur_inp[h] = {
+            "AI": r[1].number_input("AI", 0, 100, 0, key=f"p_ai_{h}", label_visibility="collapsed"),
+            "FI": r[2].number_input("FI", 0, 100, 0, key=f"p_fi_{h}", label_visibility="collapsed"),
+            "AG": r[3].number_input("AG", 0, 100, 0, key=f"p_ag_{h}", label_visibility="collapsed"),
+            "FG": r[4].number_input("FG", 0, 100, 0, key=f"p_fg_{h}", label_visibility="collapsed")
+        }
+
+    if st.button("🚀 GENERA SCHIERAMENTO SQUADRE", use_container_width=True):
         conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
         attive = df[~df['Nome'].isin(assenti)].copy()
+        
+        # Spezzati per coperture
         pool_spl = attive[attive['Ruolo'] == 'Cameriera'].head(4)['Nome'].tolist()
         st.session_state['spl_v_fin'] = pool_spl
         
@@ -281,19 +304,22 @@ with t_plan:
             m = conf_df[conf_df['Hotel'] == h]
             m_ai, m_fi, m_ag, m_fg = (m.iloc[0]['AI'], m.iloc[0]['FI'], m.iloc[0]['AG'], m.iloc[0]['FG']) if not m.empty else (60, 30, 45, 25)
             tot_fer = cur_inp[h]["FI"] + cur_inp[h]["FG"]
+            # Fabbisogno incluse coperture e biancheria stimate su fermate
             fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["AG"]*m_ag + cur_inp[h]["FG"]*m_fg + tot_fer*15) / 60
         
+        # Logica di assegnazione (Castello, Coppie, ecc.)
         fabb["MACRO: PALME & GARDEN"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
         z_ord = ["Hotel Castello", "Hotel Castello 4 Piano", "MACRO: PALME & GARDEN"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
         
         gia_a, ris = set(), []
         for zona in z_ord:
             o_n, t_h, o_f = fabb.get(zona, 0), [], 0
-            # Gov
+            # Governanti
             gov = attive[(attive['Ruolo'] == 'Governante') & (~attive['Nome'].isin(gia_a))]
             mask_g = gov['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)
-            for _, g in gov[mask_g].iterrows(): t_h.append(f"⭐ {g['Nome']} (Gov.)"); gia_a.add(g['Nome'])
-            # Cam
+            for _, g in gov[mask_g].iterrows():
+                t_h.append(f"⭐ {g['Nome']} (Gov.)"); gia_a.add(g['Nome'])
+            # Cameriere
             if o_n > 0 or zona in ["Hotel Castello", "Hotel Castello 4 Piano"]:
                 cand = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
                 cand['Pr'] = cand['Zone_Padronanza'].apply(lambda x: 0 if zona.replace("Hotel ", "").lower() in str(x).lower() else 1)
@@ -303,6 +329,7 @@ with t_plan:
                     if o_f < (o_n if o_n > 0 else 7.5):
                         t_h.append(p['Nome']); gia_a.add(p['Nome'])
                         o_f += 5.0 if (p['Part_Time'] == 1 or p['Nome'] in pool_spl) else 7.5
+                        # Partner
                         c_pre = str(p.get('Lavora_Bene_Con', '')).strip()
                         if c_pre and c_pre in attive['Nome'].values and c_pre not in gia_a:
                             t_h.append(c_pre); gia_a.add(c_pre); p_c = attive[attive['Nome'] == c_pre].iloc[0]
@@ -314,33 +341,62 @@ with t_plan:
             if t_h: ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Req": round(o_n, 1)})
         st.session_state['res_v_fin'] = ris
 
+    # --- VISUALIZZAZIONE RISULTATI ---
     if 'res_v_fin' in st.session_state:
         st.divider()
         spl = st.session_state.get('spl_v_fin', [])
         t_sc = set()
-        for r in st.session_state['res_v_fin']: t_sc.update([n.replace("⭐ ", "").replace(" (Gov.)", "").replace("🕒 ", "").replace("🌙 ", "").strip() for n in r['Team'].split(",")])
+        for r in st.session_state['res_v_fin']:
+            t_sc.update([n.replace("⭐ ", "").replace(" (Gov.)", "").replace("🕒 ", "").replace("🌙 ", "").replace("⚠️ ", "").replace(" (RIPOSO!)", "").strip() for n in r['Team'].split(",")])
+        
         v_li = sorted(list(set(df[~df['Nome'].isin(assenti)]['Nome']) - t_sc))
+        
         final_l = []
         for i, r in enumerate(st.session_state['res_v_fin']):
             key = f"edt_f_{i}"
             raw = st.session_state.get(key, [n.strip() for n in r['Team'].split(",")])
-            pul = [n.replace("⭐ ", "").replace(" (Gov.)", "").replace("🕒 ", "").replace("🌙 ", "").strip() for n in raw]
+            pul = [n.replace("⭐ ", "").replace(" (Gov.)", "").replace("🕒 ", "").replace("🌙 ", "").replace("⚠️ ", "").replace(" (RIPOSO!)", "").strip() for n in raw]
+            
             o_cop = 0
+            nomi_icon = []
             for np in pul:
                 m_o = df[df['Nome'] == np]
                 if not m_o.empty:
                     ro = m_o.iloc[0]
-                    if ro['Ruolo'] == 'Cameriera': o_cop += 5.0 if (ro['Part_Time']==1 or np in spl) else 7.5
+                    # Controllo se è un giorno di riposo forzato
+                    is_rip_day = (ro['Riposo_Pref'] == data_p_str or ro['Riposo_Pref'] == giorno_sett_p)
+                    prefix = "⚠️ " if is_rip_day else ""
+                    suffix = " (RIPOSO!)" if is_rip_day else ""
+                    
+                    if "overnante" in str(ro['Ruolo']).lower(): 
+                        nomi_icon.append(f"{prefix}⭐ {np} (Gov.){suffix}")
+                    else:
+                        is_pt = ro['Part_Time'] == 1
+                        is_spl = np in spl
+                        o_cop += 5.0 if (is_pt or is_spl) else 7.5
+                        ico = "🌙 " if is_spl else ("🕒 " if is_pt else "")
+                        nomi_icon.append(f"{prefix}{ico}{np}{suffix}")
+            
             diff = round(o_cop - r['Req'], 1)
             with st.expander(f"📍 {r['Hotel']} | {'✅ OK' if diff>=0 else '⚠️ SOTTO'} ({diff}h)"):
-                opts = sorted(list(set(pul) | set(v_li))); opts_l = []
+                opts = sorted(list(set(pul) | set(v_li)))
+                opts_l = []
                 for o in opts:
                     mo = df[df['Nome'] == o]
                     if not mo.empty:
-                        ro = mo.iloc[0]; lbl = f"⭐ {o} (Gov.)" if "overnante" in str(ro['Ruolo']).lower() else (f"🌙 {o}" if o in spl else (f"🕒 {o}" if ro['Part_Time']==1 else o))
+                        ro = mo.iloc[0]
+                        is_rd = (ro['Riposo_Pref'] == data_p_str or ro['Riposo_Pref'] == giorno_sett_p)
+                        pfx = "⚠️ " if is_rd else ""
+                        sfx = " (RIPOSO!)" if is_rd else ""
+                        if "overnante" in str(ro['Ruolo']).lower(): lbl = f"{pfx}⭐ {o} (Gov.){sfx}"
+                        elif o in spl: lbl = f"{pfx}🌙 {o}{sfx}"
+                        elif ro['Part_Time'] == 1: lbl = f"{pfx}🕒 {o}{sfx}"
+                        else: lbl = f"{pfx}{o}{sfx}"
                         opts_l.append(lbl)
-                s = st.multiselect(f"Team {r['Hotel']}", opts_l, default=[n for n in opts_l if n.replace("⭐ ", "").replace(" (Gov.)", "").replace("🕒 ", "").replace("🌙 ", "").strip() in pul], key=key)
+                
+                s = st.multiselect(f"Team {r['Hotel']}", opts_l, default=nomi_icon, key=key)
                 final_l.append({"Hotel": r['Hotel'], "Team": ", ".join(s)})
+        
         if st.button("🧊 SCARICA PDF PLANNING"):
             pdf = genera_pdf_planning(data_p.strftime("%d/%m/%Y"), final_l, spl, assenti)
             st.download_button("📥 DOWNLOAD PDF", pdf, f"Planning_{data_p}.pdf")
