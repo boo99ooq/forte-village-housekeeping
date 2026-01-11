@@ -248,13 +248,12 @@ with t_tempi:
         st.markdown("---")
     
         if st.button("🚀 GENERA SCHIERAMENTO", use_container_width=True):
-            ris = [] # Definiamo ris qui per evitare NameError
+            ris = [] 
             conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
             if not conf_df.empty:
                 conf_df.columns = [str(c).strip().upper() for c in conf_df.columns]
             
             attive = df[~df['Nome'].isin(assenti)].copy()
-            # Pool spezzati (le prime 4 cameriere libere)
             pool_spl = attive[attive['Ruolo'] == 'Cameriera'].head(4)['Nome'].tolist()
             st.session_state['spl_v_fin'] = pool_spl
             
@@ -266,31 +265,32 @@ with t_tempi:
                 m_ag = m.iloc[0].get('AG', 45) if not m.empty else 45
                 m_fg = m.iloc[0].get('FG', 25) if not m.empty else 25
                 
-                # Calcolo automatico COP (1/3) e BIANC (1/4)
                 t_cop = (m_fi / 3) * cur_inp[h]["COP"]
                 t_bian = (m_fi / 4) * cur_inp[h]["BIAN"]
-                
                 fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["AG"]*m_ag + cur_inp[h]["FG"]*m_fg + t_cop + t_bian) / 60
     
-            fabb["MACRO: PALME & GARDEN"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
-            z_ord = ["Hotel Castello", "Hotel Castello 4 Piano", "MACRO: PALME & GARDEN"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
+            # Ridenominazione zona Macro
+            fabb["Palme & Garden"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
+            z_ord = ["Hotel Castello", "Hotel Castello 4 Piano", "Palme & Garden"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
             
             gia_a = set()
             for zona in z_ord:
                 o_n, t_h, o_f = fabb.get(zona, 0), [], 0
-                # 1. Governanti ⭐
+                # 1. GOVERNANTI ⭐
                 gv = attive[(attive['Ruolo'] == 'Governante') & (~attive['Nome'].isin(gia_a))]
-                for _, g in gv[gv['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)].iterrows():
+                mask_g = gv['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)
+                for _, g in gv[mask_g].iterrows():
                     t_h.append(f"⭐ {g['Nome']} (Gov.)")
                     gia_a.add(g['Nome'])
                 
-                # 2. Cameriere (con icone 🕒 e 🌙)
+                # 2. CAMERIERE (Icone 🌙 e 🕒)
                 if o_n > 0 or zona in ["Hotel Castello", "Hotel Castello 4 Piano"]:
                     cand = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
                     for _, p in cand.iterrows():
                         if p['Nome'] in gia_a: continue
                         if o_f < (o_n if o_n > 0 else 7.5):
                             is_spl, is_pt = p['Nome'] in pool_spl, p['Part_Time'] == 1
+                            # Qui aggiungiamo le icone direttamente al nome nel team
                             ico = "🌙 " if is_spl else ("🕒 " if is_pt else "")
                             t_h.append(f"{ico}{p['Nome']}")
                             gia_a.add(p['Nome'])
@@ -308,18 +308,16 @@ with t_tempi:
             st.session_state['res_v_fin'] = ris
             st.rerun()
     
-        # --- RIQUADRI RIASSUNTIVI (Fuori dal tasto) ---
         if 'res_v_fin' in st.session_state:
             st.divider()
-            # Calcolo cameriere rimaste
             tutte_c = set(df[(df['Ruolo'] == 'Cameriera') & (~df['Nome'].isin(assenti))]['Nome'])
             assey = set()
             for r in st.session_state['res_v_fin']:
+                # Puliamo i nomi per il calcolo delle rimanenti
                 nomi_p = [n.replace("🌙 ", "").replace("🕒 ", "").strip() for n in r['Team'].split(", ") if "Gov." not in n]
                 assey.update(nomi_p)
             
             rimaste = sorted(list(tutte_c - assey))
-            
             c1, c2 = st.columns(2)
             with c1:
                 st.warning(f"🛌 Disponibili/Non Assegnate ({len(rimaste)})")
@@ -332,6 +330,7 @@ with t_tempi:
             final_l = []
             for i, r in enumerate(st.session_state['res_v_fin']):
                 with st.expander(f"📍 {r['Hotel']} | {r['Info']} | {r['Req']}h"):
+                    # Questa parte permette di vedere le icone nel titolo ma di selezionare il nome pulito nel multiselect
                     def_p = [n.replace("⭐ ", "").replace(" (Gov.)", "").replace("🌙 ", "").replace("🕒 ", "").strip() for n in r['Team'].split(", ")]
                     s = st.multiselect(f"Modifica {r['Hotel']}", nomi_db, default=def_p, key=f"e_{i}")
                     final_l.append({"Hotel": r['Hotel'], "Team": ", ".join(s)})
