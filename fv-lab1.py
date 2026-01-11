@@ -146,19 +146,16 @@ with t3:
         ris = []
         for zona in z_ordine:
             o_n, t_h, o_f = fabb.get(zona, 0), [], 0
-            # 1. Filtro disponibili REALE
-            disponibili = attive[~attive['Nome'].isin(gia_a)]
             
             # Gov
-            gov = disponibili[disponibili['Ruolo'] == 'Governante']
+            gov = attive[(attive['Ruolo'] == 'Governante') & (~attive['Nome'].isin(gia_a))]
             mask_g = gov['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)
             for _, g in gov[mask_g].iterrows():
                 t_h.append(f"⭐ {g['Nome']} (Gov.)"); gia_a.add(g['Nome'])
             
             # Cam
-            disponibili = attive[~attive['Nome'].isin(gia_a)]
             if o_n > 0 or zona in ["Hotel Castello", "Hotel Castello 4 Piano"]:
-                cand = disponibili[disponibili['Ruolo'] == 'Cameriera'].copy()
+                cand = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
                 cand['Pr'] = cand['Zone_Padronanza'].apply(lambda x: 0 if zona.replace("Hotel ", "").lower() in str(x).lower() else 1)
                 cand = cand.sort_values(['Pr'], ascending=True)
                 for _, p in cand.iterrows():
@@ -166,16 +163,23 @@ with t3:
                         t_h.append(p['Nome']); gia_a.add(p['Nome'])
                         o_f += 5.0 if (p.get('Part_Time', 0) == 1 or p['Nome'] in pool_spl) else 7.5
                     else: break
+            
+            # --- LOGICA NUMERO PARI (COPPIE) ---
+            if len(t_h) > 0 and len(t_h) % 2 != 0:
+                restanti = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
+                if not restanti.empty:
+                    restanti['Pr'] = restanti['Zone_Padronanza'].apply(lambda x: 0 if zona.replace("Hotel ", "").lower() in str(x).lower() else 1)
+                    rinforzo = restanti.sort_values(['Pr'], ascending=True).iloc[0]
+                    t_h.append(rinforzo['Nome'])
+                    gia_a.add(rinforzo['Nome'])
+
             if t_h: ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Ore": round(o_n, 1)})
         st.session_state['res_v_fin'] = ris
         st.session_state['spl_v_fin'] = pool_spl
 
-    # --- LOGICA UNICITÀ MANUALE ---
     if 'res_v_fin' in st.session_state:
         st.divider()
         tutte_attive = set(n for n in nomi_db if n not in assenti)
-        
-        # Recupero selezioni correnti dai widget per calcolare le libere
         tutti_scelti_manualmente = set()
         for i in range(len(st.session_state['res_v_fin'])):
             val = st.session_state.get(f"edt_f_{i}", [])
@@ -196,15 +200,12 @@ with t3:
         final_list = []
         for i, r in enumerate(st.session_state['res_v_fin']):
             with st.expander(f"📍 {r['Hotel']}"):
-                # Nomi attualmente in questo hotel
                 key = f"edt_f_{i}"
-                if key in st.session_state:
-                    attuali_qui = st.session_state[key]
-                else:
-                    attuali_qui = [n.strip() for n in r['Team'].split(",") if n.strip()]
-                
-                # Opzioni = Nomi qui + Nomi non assegnati da nessuna parte
+                attuali_qui = st.session_state.get(key, [n.strip() for n in r['Team'].split(",") if n.strip()])
                 opts = sorted(list(set(attuali_qui) | set(vere_libere)))
+                # Feedback visivo se dispari
+                if len(attuali_qui) % 2 != 0:
+                    st.warning(f"⚠️ Questa squadra ha {len(attuali_qui)} persone (Numero Dispari).")
                 scelta = st.multiselect(f"Team {r['Hotel']}", opts, default=attuali_qui, key=key)
                 final_list.append({"Hotel": r['Hotel'], "Team": ", ".join(scelta)})
         
