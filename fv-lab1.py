@@ -248,7 +248,7 @@ with t_tempi:
         st.markdown("---")
     
        if st.button("🚀 GENERA SCHIERAMENTO", use_container_width=True):
-            ris = [] 
+          ris = [] 
             conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
             if not conf_df.empty:
                 conf_df.columns = [str(c).strip().upper() for c in conf_df.columns]
@@ -352,3 +352,12 @@ with t_tempi:
                     # Nel menu (multiselect) usiamo nomi puliti per evitare errori di sistema
                     def_p = [n.replace("⭐ ", "").replace(" (Gov.)", "").replace("🌙 ", "").replace("🕒 ", "").strip() for n in r['Team'].split(", ")]
                     st.multiselect(f"Modifica {r['Hotel']}", nomi_db, default=def_p, key=f"e_{i}")
+    
+    Perché le icone non compaiono nel menu?
+    
+    È una scelta tecnica: nel menu a discesa (multiselect) dobbiamo usare i nomi "nudi" (senza icone) perché devono combaciare esattamente con la lista nomi_db. Se mettessimo le icone nel menu, Streamlit andrebbe in errore perché non troverebbe "🌙 Maria" nel database, dato che lì si chiama solo "Maria".
+    
+    Per questo ho aggiunto la riga 👥 Team: ... subito sopra il menu: lì vedi le icone ufficiali per il controllo, mentre nel menu sotto puoi aggiungere o togliere i nomi comodamente.
+    Conteggio Coppie
+    
+    Ho mantenuto il calcolo delle coppie. Ad esempio, se hai 5 cameriere, vedrai Cam: 5 (Coppie: 2.5). Se ne hai 4, vedrai Cam: 4 (Coppie: 2.0).
