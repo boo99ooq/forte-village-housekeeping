@@ -154,15 +154,12 @@ with t_staff:
         
         with c5:
             st.write("**Relazioni**")
-            # Viaggia con
             idx_v = nomi_db.index(curr['Viaggia_Con'])+1 if curr is not None and curr['Viaggia_Con'] in nomi_db else 0
             f_via = st.selectbox("🚗 Viaggia con...", ["Nessuna"] + nomi_db, index=idx_v)
             
-            # Lavora bene con
             idx_l = nomi_db.index(curr['Lavora_Bene_Con'])+1 if curr is not None and curr['Lavora_Bene_Con'] in nomi_db else 0
             f_lbc = st.selectbox("🤝 Lavora bene con...", ["Nessuna"] + nomi_db, index=idx_l)
             
-            # Avviso Logistico
             if f_via != "Nessuna" and f_via == f_lbc:
                 st.info(f"💡 {f_nome} viaggia e lavora con {f_via}.")
 
@@ -170,33 +167,21 @@ with t_staff:
             st.write("**Gestione Riposi**")
             opzioni_r = ["Nessuno", "Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica", "DATA SPECIFICA"]
             
-            # Recupero valore salvato
             val_rip = str(curr['Riposo_Pref']) if curr is not None else "Nessuno"
+            idx_r = opzioni_r.index(val_rip) if val_rip in opzioni_r else (8 if val_rip != "" and "/" in val_rip else 0)
             
-            # Cerchiamo di capire se è un giorno o una data
-            idx_r = 0
-            data_default = datetime.now()
-            
-            if val_rip in opzioni_r[:-1]: # È un giorno della settimana
-                idx_r = opzioni_r.index(val_rip)
-            elif val_rip != "" and val_rip != "nan" and val_rip != "Nessuno":
-                idx_r = 8 # Imposta su DATA SPECIFICA
-                try:
-                    data_default = datetime.strptime(val_rip, "%d/%m/%Y")
-                except:
-                    pass
-
-            # Visualizziamo i due campi uno sotto l'altro
             f_rip_tipo = st.selectbox("Tipo Riposo", opzioni_r, index=idx_r)
             
-            # Il calendario è sempre visibile per evitare blocchi del form, 
-            # ma lo usiamo solo se il tipo è DATA SPECIFICA
-           f_data_s = st.date_input("Seleziona data", d_def, format="DD/MM/YYYY")
+            # Calendario sempre presente per evitare errori del form
+            try:
+                d_def = datetime.strptime(val_rip, "%d/%m/%Y")
+            except:
+                d_def = datetime.now()
             
-            if f_rip_tipo == "DATA SPECIFICA":
-                f_rip_final = f_data_s.strftime("%d/%m/%Y")
-            else:
-                f_rip_final = f_rip_tipo
+            f_data_s = st.date_input("Calendario (solo se Data Specifica)", d_def, format="DD/MM/YYYY")
+            
+            # Decidiamo cosa salvare
+            f_rip_final = f_data_s.strftime("%d/%m/%Y") if f_rip_tipo == "DATA SPECIFICA" else f_rip_tipo
 
         st.divider()
         
@@ -210,7 +195,9 @@ with t_staff:
         f_emp = v2.slider("Empatia", 1, 10, int(curr.get('Empatia', 5)) if curr is not None else 5)
         f_gui = v3.slider("Capacità Guida", 1, 10, int(curr.get('Capacita_Guida', 5)) if curr is not None else 5)
 
-        if st.form_submit_button("💾 SALVA SCHEDA"):
+        # IL PULSANTE DI SALVATAGGIO (Mandatorio)
+        save_btn = st.form_submit_button("💾 SALVA SCHEDA")
+        if save_btn:
             if f_nome:
                 nuova_r = {
                     "Nome": f_nome.strip(), "Ruolo": f_ruolo, "Zone_Padronanza": ", ".join(f_padro),
@@ -219,19 +206,17 @@ with t_staff:
                     "Professionalita": f_prof, "Esperienza": f_esp, "Tenuta_Fisica": f_ten,
                     "Disponibilita": f_dis, "Empatia": f_emp, "Capacita_Guida": f_gui
                 }
-                # Aggiornamento database
                 df_clean = df[df['Nome'] != (curr['Nome'] if curr is not None else "---")]
                 df = pd.concat([df_clean, pd.DataFrame([nuova_r])], ignore_index=True)
                 save_data(df)
-                st.success(f"Dati di {f_nome} salvati correttamente!")
+                st.success(f"Dati di {f_nome} salvati!")
                 st.rerun()
 
     # Bottone PDF fuori dal Form
     if curr is not None:
         if st.button("📄 GENERA PDF SCHEDA PERSONALE"):
             pdf_s = pdf_scheda_staff(curr)
-            st.download_button(f"📥 Scarica scheda {curr['Nome']}", pdf_s, f"Scheda_{curr['Nome']}.pdf")
-# --- TAB TEMPI ---
+            st.download_button(f"📥 Scarica scheda {curr['Nome']}", pdf_s, f"Scheda_{curr['Nome']}.pdf")# --- TAB TEMPI ---
 with t_tempi:
     st.header("⚙️ Tempi Standard")
     c_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
