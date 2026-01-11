@@ -222,18 +222,33 @@ with t_plan:
     if st.button("🚀 GENERA SCHIERAMENTO", use_container_width=True):
         conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
         attive = df[~df['Nome'].isin(assenti)].copy()
-        pool_spl = attive[attive['Ruolo'] == 'Cameriera'].head(4)['Nome'].tolist()
-        st.session_state['spl_v_fin'] = pool_spl
         
-        # Forza la prima colonna a chiamarsi 'HOTEL' e pulisce le altre
+        # 1. Pulizia e normalizzazione colonne
         if not conf_df.empty:
             conf_df.columns = [str(c).strip().upper() for c in conf_df.columns]
-            # Se la prima colonna non si chiama HOTEL, la rinominiamo noi d'ufficio
             if 'HOTEL' not in conf_df.columns:
-                conf_df.rename(columns={conf_df.columns[0]: 'HOTEL'}, inplace=True)        
-        fabb["MACRO: PALME & GARDEN"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
-        z_ord = ["Hotel Castello", "Hotel Castello 4 Piano", "MACRO: PALME & GARDEN"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
+                conf_df.rename(columns={conf_df.columns[0]: 'HOTEL'}, inplace=True)
         
+        # 2. Inizializzazione fabb (Sposta questa riga esattamente qui)
+        fabb = {}
+        
+        # 3. Calcolo fabbisogni singoli hotel
+        for h in lista_hotel:
+            m = conf_df[conf_df['HOTEL'] == h] if not conf_df.empty else pd.DataFrame()
+            if not m.empty:
+                # Usiamo i nomi che abbiamo visto nel tuo file
+                m_ai = m.iloc[0].get('AI', m.iloc[0].get('ARR I', 60))
+                m_fi = m.iloc[0].get('FI', m.iloc[0].get('FERM I', 30))
+                m_ag = m.iloc[0].get('AG', m.iloc[0].get('ARR G', 45))
+                m_fg = m.iloc[0].get('FG', m.iloc[0].get('FERM G', 25))
+            else:
+                m_ai, m_fi, m_ag, m_fg = 60, 30, 45, 25
+            
+            tot_f = cur_inp[h]["FI"] + cur_inp[h]["FG"]
+            fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["AG"]*m_ag + cur_inp[h]["FG"]*m_fg + tot_f*15) / 60
+        
+        # 4. Calcolo Macro (Ora fabb esiste sicuramente!)
+        fabb["MACRO: PALME & GARDEN"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)      
         gia_a, ris = set(), []
         for zona in z_ord:
             o_n, t_h, o_f = fabb.get(zona, 0), [], 0
