@@ -219,9 +219,13 @@ with t_plan:
             "FG": r[4].number_input("FG", 0, 100, 0, key=f"p_fg_{h}", label_visibility="collapsed")
         }
 
-    if st.button("🚀 GENERA SCHIERAMENTO", use_container_width=True):
+   if st.button("🚀 GENERA SCHIERAMENTO", use_container_width=True):
         conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
         attive = df[~df['Nome'].isin(assenti)].copy()
+        
+        # QUESTA RIGA MANCAVA O ERA NEL POSTO SBAGLIATO:
+        pool_spl = attive[attive['Ruolo'] == 'Cameriera'].head(4)['Nome'].tolist()
+        st.session_state['spl_v_fin'] = pool_spl
         
         # 1. Pulizia e normalizzazione colonne
         if not conf_df.empty:
