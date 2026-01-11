@@ -2,51 +2,56 @@ import streamlit as st
 import pandas as pd
 import os
 from datetime import datetime
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
 from io import BytesIO
 
-# --- CONFIGURAZIONE E CARICAMENTO ---
+# Importiamo reportlab con un controllo di sicurezza
+try:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+    import_pdf_ok = True
+except ImportError:
+    import_pdf_ok = False
+
+st.set_page_config(page_title="Resort Housekeeping Master", layout="wide")
+
+# --- DATABASE ---
 FILE_STAFF = 'Housekeeping_DB - Staff.csv'
 FILE_CONFIG = 'config_tempi.csv'
+FILE_LAST_PLAN = 'ultimo_planning_caricato.csv'
 
 def load_data():
     if os.path.exists(FILE_STAFF):
-        return pd.read_csv(FILE_STAFF).fillna("")
+        df = pd.read_csv(FILE_STAFF)
+        df.columns = [c.strip() for c in df.columns]
+        for col in ['Part_Time', 'Indisp_Spezzato', 'Conteggio_Spezzati']:
+            if col not in df.columns: df[col] = 0
+        return df.fillna("")
     return pd.DataFrame()
 
-# --- FUNZIONE GENERAZIONE PDF ---
-def genera_pdf(data, schieramento, split_list):
+df = load_data()
+lista_hotel = ["Hotel Castello", "Hotel Castello Garden", "Castello 4 Piano", "Cala del Forte", "Le Dune", "Villa del Parco", "Hotel Pineta", "Bouganville", "Le Palme", "Il Borgo", "Le Ville", "Spazi Comuni"]
+
+# --- FUNZIONE PDF ---
+def genera_pdf(data_str, schieramento, split_list):
     buffer = BytesIO()
     p = canvas.Canvas(buffer, pagesize=A4)
     w, h = A4
-    
-    # Intestazione
     p.setFont("Helvetica-Bold", 16)
-    p.drawString(50, h - 50, f"PLANNING HOUSEKEEPING - {data}")
+    p.drawString(50, h - 50, f"PLANNING HOUSEKEEPING - {data_str}")
     p.line(50, h - 60, 540, h - 60)
     
     y = h - 100
-    p.setFont("Helvetica-Bold", 12)
+    for res in schieramento:
+        p.setFont("Helvetica-Bold", 12)
+        p.drawString(50, y, f"ZONA: {res['Hotel']}")
+        y -= 15
+        p.setFont("Helvetica", 10)
+        p.drawString(60, y, f"Team: {res['Team']}")
+        y -= 25
+        if y < 100:
+            p.showPage()
+            y = h - 50
     
-    # Zone e Team
-    for index, row in schieramento.iterrows():
-        if row['Team']:
-            p.setFont("Helvetica-Bold", 11)
-            p.drawString(50, y, f"ZONA: {row['Hotel']}")
-            y -= 15
-            p.setFont("Helvetica", 10)
-            p.drawString(60, y, f"Team: {row['Team']}")
-            y -= 10
-            p.setFont("Helvetica-Oblique", 9)
-            p.drawString(60, y, f"Responsabile: {row['Responsabile']}")
-            y -= 25
-            
-            if y < 100: # Nuova pagina se spazio esaurito
-                p.showPage()
-                y = h - 50
-
-    # Sezione Spezzato in fondo
     y -= 20
     p.line(50, y, 540, y)
     y -= 30
@@ -55,55 +60,59 @@ def genera_pdf(data, schieramento, split_list):
     y -= 20
     p.setFont("Helvetica", 11)
     p.drawString(60, y, f"Personale: {', '.join(split_list)}")
-    
-    p.showPage()
     p.save()
     buffer.seek(0)
     return buffer
 
-# --- LOGICA APP STREAMLIT ---
-st.title("🚀 Planning Pro + Export PDF")
+# --- TABS ---
+t1, t2, t3, t4 = st.tabs(["🏆 Dashboard", "⚙️ Tempi", "🚀 Planning", "📅 Storico"])
 
-df = load_data()
-if not df.empty:
-    # --- CALCOLO E ALERT ---
-    st.subheader("📊 Analisi Copertura Ore")
+with t3:
+    st.header("🚀 Elaborazione e Controllo Ore")
+    data_sel = st.date_input("Data Planning:", datetime.now())
+    assenti = st.multiselect("🛌 Assenti/Riposi:", sorted(df['Nome'].tolist()))
     
-    # Esempio dati (da integrare con la tua logica di inserimento camere)
-    ore_necessarie_esempio = 15.5 
-    # Calcolo ore fornite:
-    # Supponiamo: 1 Full (7.5) + 1 PT (5) = 12.5 ore
-    ore_fornite_esempio = 12.5 
+    # Inserimento dati camere (simulato)
+    st.write("### Inserimento Carico Lavoro")
+    # ... qui il codice dei number_input per AI, FI, COP ...
     
-    differenza = ore_fornite_esempio - ore_necessarie_esempio
-    
-    if differenza < 0:
-        st.error(f"⚠️ **Sotto-organico!** All'Hotel Castello mancano {abs(differenza)} ore di lavoro per completare il pomeriggio.")
-    else:
-        st.success(f"✅ Copertura ottimale per Hotel Castello (+{differenza} ore).")
-
-    # --- SIMULAZIONE DATI PER PDF ---
-    schieramento_finto = pd.DataFrame([
-        {"Hotel": "Hotel Castello", "Team": "Marcella, Isotta (PT)", "Responsabile": "Governante A"},
-        {"Hotel": "Le Dune", "Team": "Leonarda, Medusa", "Responsabile": "Governante B"}
-    ])
-    lista_split = ["Eudossia", "Clarimunda"]
-
-    # --- BOTTONI EXPORT ---
-    st.divider()
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Generazione PDF
-        pdf_file = genera_pdf(datetime.now().strftime("%d/%m/%Y"), schieramento_finto, lista_split)
-        st.download_button(
-            label="📥 Scarica Planning PDF",
-            data=pdf_file,
-            file_name=f"Planning_{datetime.now().strftime('%Y%m%d')}.pdf",
-            mime="application/pdf"
-        )
+    if st.button("🚀 GENERA E CONTROLLA"):
+        conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
+        attive = df[~df['Nome'].isin(assenti)]
         
-    with col2:
-        # Testo WhatsApp (Già implementato)
-        if st.button("📋 Genera Testo WhatsApp"):
-            st.code("Testo pronto da copiare...")
+        # 1. Scelta Split
+        pool_split = attive[(attive['Part_Time'] == 0) & (attive['Indisp_Spezzato'] == 0)]
+        nomi_split = pool_split.sort_values('Conteggio_Spezzati').head(4)['Nome'].tolist()
+        
+        # 2. Analisi e Alert
+        schieramento_finale = []
+        for h in lista_hotel:
+            # Esempio: calcoliamo le ore necessarie per l'hotel (logica FI/AI)
+            ore_servono = 15.0 # Dato simulato
+            
+            # Calcoliamo le ore fornite dal team assegnato
+            # (Qui dovresti avere la logica che assegna i nomi)
+            team_nomi = ["Marcella", "Isotta"] 
+            ore_fornite = 0
+            for n in team_nomi:
+                persona = attive[attive['Nome'] == n].iloc[0]
+                if str(persona['Part_Time']) in ["1", "True"] or n in nomi_split:
+                    ore_fornite += 5.0
+                else:
+                    ore_fornite += 7.5
+            
+            diff = ore_fornite - ore_servono
+            if diff < 0:
+                st.error(f"⚠️ **{h}**: Mancano {abs(diff)} ore! Team attuale fornisce solo {ore_fornite}h su {ore_servono}h necessarie.")
+            else:
+                st.success(f"✅ **{h}**: Coperto ({ore_fornite}h fornite).")
+            
+            schieramento_finale.append({"Hotel": h, "Team": ", ".join(team_nomi), "Ore": ore_fornite})
+
+        # --- EXPORT PDF ---
+        st.divider()
+        if import_pdf_ok:
+            pdf = genera_pdf(data_sel.strftime("%d/%m/%Y"), schieramento_finale, nomi_split)
+            st.download_button("📥 SCARICA PDF PER GOVERNANTI", data=pdf, file_name=f"Planning_{data_sel}.pdf", mime="application/pdf")
+        else:
+            st.warning("Installa 'reportlab' via requirements.txt per scaricare il PDF.")
