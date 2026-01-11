@@ -191,7 +191,7 @@ with t_staff:
             
             # Il calendario è sempre visibile per evitare blocchi del form, 
             # ma lo usiamo solo se il tipo è DATA SPECIFICA
-             f_data_s = st.date_input("Seleziona data", d_def, format="DD/MM/YYYY")
+           f_data_s = st.date_input("Seleziona data", d_def, format="DD/MM/YYYY")
             
             if f_rip_tipo == "DATA SPECIFICA":
                 f_rip_final = f_data_s.strftime("%d/%m/%Y")
