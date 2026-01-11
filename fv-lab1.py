@@ -246,6 +246,7 @@ with t_plan:
         fabb["MACRO: PALME & GARDEN"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
         z_ord = ["Hotel Castello", "Hotel Castello 4 Piano", "MACRO: PALME & GARDEN"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
         
+       # 5. Ciclo di assegnazione
         gia_a, ris = set(), []
         for zona in z_ord:
             o_n, t_h, o_f = fabb.get(zona, 0), [], 0
@@ -254,7 +255,8 @@ with t_plan:
             gov = attive[(attive['Ruolo'] == 'Governante') & (~attive['Nome'].isin(gia_a))]
             mask_g = gov['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)
             for _, g in gov[mask_g].iterrows():
-                t_h.append(f"⭐ {g['Nome']} (Gov.)"); gia_a.add(g['Nome'])
+                t_h.append(f"⭐ {g['Nome']} (Gov.)")
+                gia_a.add(g['Nome'])
             
             # Cameriere
             if o_n > 0 or zona in ["Hotel Castello", "Hotel Castello 4 Piano"]:
@@ -265,32 +267,42 @@ with t_plan:
                     if o_f < (o_n if o_n > 0 else 7.5):
                         is_spl, is_pt = p['Nome'] in pool_spl, p['Part_Time'] == 1
                         ico = "🌙 " if is_spl else ("🕒 " if is_pt else "")
-                        t_h.append(f"{ico}{p['Nome']}"); gia_a.add(p['Nome'])
+                        t_h.append(f"{ico}{p['Nome']}")
+                        gia_a.add(p['Nome'])
                         o_f += 5.0 if (is_pt or is_spl) else 7.5
+                        
+                        c_pre = str(p.get('Lavora_Bene_Con', '')).strip()
+                        if c_pre in attive['Nome'].values and c_pre not in gia_a:
+                            p_c = attive[attive['Nome'] == c_pre].iloc[0]
+                            ico_c = "🌙 " if c_pre in pool_spl else ("🕒 " if p_c['Part_Time'] == 1 else "")
+                            t_h.append(f"{ico_c}{c_pre}"); gia_a.add(c_pre)
+                            o_f += 5.0 if (p_c['Part_Time'] == 1 or c_pre in pool_spl) else 7.5
                     else: break
             
             if t_h:
-                # Conteggi per etichetta
+                # CREAZIONE INFO PER ETICHETTA (Importante per evitare KeyError)
                 n_gov = len([n for n in t_h if "⭐" in n])
                 n_spl = len([n for n in t_h if "🌙" in n])
                 n_pt = len([n for n in t_h if "🕒" in n])
                 n_std = len(t_h) - n_gov - n_spl - n_pt
-                info_team = f"Tot: {len(t_h)} (Gov: {n_gov}, Std: {n_std}, PT: {n_pt}, Spl: {n_spl})"
+                info_txt = f"Tot: {len(t_h)} (G:{n_gov} S:{n_std} PT:{n_pt} 🌙:{n_spl})"
                 
-                ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Req": round(o_n, 1), "Info": info_team})
+                ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Req": round(o_n, 1), "Info": info_txt})
         
         st.session_state['res_v_fin'] = ris
         st.rerun()
 
     if 'res_v_fin' in st.session_state:
-        st.divider(); final_l = []
+        st.divider()
+        final_l = []
         for i, r in enumerate(st.session_state['res_v_fin']):
-            with st.expander(f"📍 {r['Hotel']} | {r['Info']} | {r['Req']}h"):
+            # Usiamo .get() per sicurezza: se Info non esiste, mette stringa vuota
+            label_info = r.get('Info', 'Team Generato')
+            with st.expander(f"📍 {r['Hotel']} | {label_info} | {r['Req']}h"):
                 def_p = [n.replace("⭐ ", "").replace(" (Gov.)", "").replace("🌙 ", "").replace("🕒 ", "").strip() for n in r['Team'].split(",")]
-                s = st.multiselect(f"Modifica Team {r['Hotel']}", nomi_db, default=def_p, key=f"e_{i}")
+                s = st.multiselect(f"Modifica {r['Hotel']}", nomi_db, default=def_p, key=f"e_{i}")
                 final_l.append({"Hotel": r['Hotel'], "Team": ", ".join(s)})
         
         if st.button("🧊 SCARICA PDF"):
             pdf = genera_pdf_planning(data_p_str, final_l, st.session_state.get('spl_v_fin', []), assenti)
-            st.download_button("📥 DOWNLOAD", pdf, f"Planning_{data_p}.pdf")                
-                
+            st.download_button("📥 DOWNLOAD", pdf, f"Planning_{data_p}.pdf")
