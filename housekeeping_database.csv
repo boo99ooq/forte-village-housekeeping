@@ -1,50 +1,208 @@
-Nome,Ruolo,Professionalita,Esperienza,Capacita_Guida,Tenuta_Fisica,Disponibilita,Empatia,Pendolare,Turno_Spezzato,Jolly,Riposo_Preferenziale,Zone_Padronanza,Lavora_Bene_Con,Non_Assegnare_A,Ultima_Modifica
-Clarimunda,Cameriera,8,7,6,9.0,10.0,7.0,1.0,1.0,1.0,Nessuna,Hotel Castello,Amaryllis,Nessuna,
-Doralice,Cameriera,7,6,5,10.0,9.0,8.0,1.0,0.0,0.0,Martedì,Le Dune,Nessuna,Clarimunda,
-Euphemia,Cameriera,9,8,7,8.0,6.0,10.0,0.0,1.0,0.0,Nessuna,Villa del Parco,Belphoebe,Nessuna,
-Gliceria,Cameriera,6,5,4,10.0,10.0,6.0,1.0,1.0,0.0,Mercoledì,Hotel Bouganville,Nessuna,Nessuna,
-Hesperia,Cameriera,8,9,7,7.0,7.0,8.0,0.0,1.0,1.0,Giovedì,"Hotel Pineta, Il Borgo",Febe,Nessuna,
-Isidra,Cameriera,7,8,5,8.0,7.0,9.0,0.0,0.0,0.0,Nessuna,Hotel Le Palme,Nessuna,Doralice,
-Jolanda,Governante,9,9,8,7.0,6.0,7.0,1.0,1.0,0.0,Venerdì,"Hotel Castello Garden, Castello 4 Piano",Nessuna,Nessuna,
-Ligeia,Cameriera,8,7,5,9.0,8.0,8.0,0.0,0.0,1.0,Sabato,Il Borgo,Kalliope,Nessuna,
-Zelmira,Governante,9,8,4,10.0,10.0,7.0,1.0,1.0,1.0,Mercoledì,"Villa del Parco, Il Borgo",Elettra,Nessuna,
-Pandora,Governante,10,8,7,8.0,9.0,8.0,0.0,1.0,1.0,Nessuna,Le Dune,Nessuna,Nessuna,
-Sibilla,Governante,9,8,4,10.0,7.0,7.0,1.0,0.0,0.0,Sabato,Le Ville,Nessuna,Nessuna,
-Lavinia,Governante,9,10,8,6.0,8.0,8.0,0.0,0.0,0.0,Domenica,Il Borgo,Brunilde,Nessuna,
-Priscilla,Governante,9,9,7,8.0,10.0,9.0,0.0,1.0,1.0,Mercoledì,"Hotel Castello, Le Dune",Nessuna,Nessuna,
-Febe,Governante,10,7,4,7.0,9.0,8.0,1.0,1.0,1.0,Martedì,"Hotel Castello, Castello 4 Piano",Hesperia,Nessuna,
-Brunilde,Governante,10,10,9,9.0,8.0,7.0,1.0,1.0,0.0,Nessuna,Le Dune,Lavinia,Nessuna,
-Amaryllis,Governante,10,7,6,7.0,7.0,8.0,0.0,1.0,0.0,Giovedì,"Le Palme, Hotel Castello Garden",Clarimunda,Nessuna,
-Niobe,Governante,10,4,4,5.0,7.0,9.0,1.0,1.0,0.0,Martedì,Bouganville,Nessuna,Nessuna,
-Zenobia,Cameriera,8,5,6,8.0,9.0,6.0,1.0,1.0,0.0,Martedì,"Castello 4 Piano, Il Borgo",Nessuna,Nessuna,
-Teodolinda,Cameriera,9,6,7,7.0,6.0,8.0,0.0,1.0,1.0,Nessuna,"Le Dune, Castello 4 Piano",Nessuna,Nessuna,
-Adelasia,Cameriera,9,3,7,5.0,9.0,10.0,0.0,0.0,1.0,Lunedì,"Il Borgo, Le Palme, Hotel Castello Garden",Nessuna,Nessuna,
-Agave,Cameriera,6,6,9,8.0,5.0,7.0,1.0,1.0,0.0,Lunedì,Hotel Castello Garden,Nessuna,Nessuna,
-Altea,Cameriera,7,8,6,7.0,8.0,9.0,0.0,0.0,1.0,Mercoledì,"Hotel Castello Garden, Le Dune",Nessuna,Nessuna,
-Amalasunta,Cameriera,8,10,9,9.0,6.0,5.0,1.0,0.0,1.0,Martedì,"Villa del Parco, Hotel Castello Garden",Nessuna,Nessuna,
-Aniceta,Cameriera,5,4,1,10.0,7.0,10.0,0.0,1.0,0.0,Domenica,Le Palme,Nessuna,Nessuna,
-Anselma,Cameriera,9,6,6,8.0,9.0,8.0,1.0,0.0,0.0,Giovedì,"Il Borgo, Le Palme",Nessuna,Nessuna,
-Asteria,Cameriera,8,8,9,7.0,10.0,9.0,0.0,1.0,1.0,Mercoledì,"Le Ville, Castello 4 Piano",Nessuna,Nessuna,
-Atanasia,Cameriera,10,4,4,5.0,7.0,9.0,1.0,1.0,0.0,Sabato,"Villa del Parco, Le Palme, Le Dune",Nessuna,Nessuna,
-Aurelia,Cameriera,5,8,4,8.0,9.0,9.0,0.0,1.0,0.0,Giovedì,"Le Ville, Le Palme",Nessuna,Nessuna,
-Balsamina,Cameriera,9,7,6,8.0,8.0,8.0,1.0,0.0,1.0,Martedì,"Le Palme, Hotel Castello, Castello 4 Piano",Nessuna,Nessuna,
-Basilia,Cameriera,7,10,5,9.0,10.0,9.0,0.0,1.0,0.0,Domenica,"Villa del Parco, Hotel Castello Garden",Nessuna,Nessuna,
-Blandina,Cameriera,6,8,4,10.0,7.0,7.0,1.0,0.0,0.0,Giovedì,Castello 4 Piano,Nessuna,Nessuna,
-Callisto,Cameriera,9,6,7,7.0,6.0,8.0,0.0,1.0,1.0,Venerdì,"Hotel Castello, Le Ville, Hotel Castello Garden",Nessuna,Nessuna,
-Cassandra,Cameriera,8,5,6,8.0,9.0,6.0,1.0,1.0,0.0,Sabato,"Le Ville, Castello 4 Piano, Le Palme",Nessuna,Nessuna,
-Castrense,Cameriera,7,9,5,9.0,8.0,10.0,0.0,0.0,0.0,Lunedì,"Villa del Parco, Bouganville",Nessuna,Nessuna,
-Celidonia,Cameriera,6,8,4,10.0,10.0,7.0,1.0,1.0,1.0,Domenica,"Le Ville, Hotel Castello Garden",Nessuna,Nessuna,
-Clotilde,Cameriera,8,7,6,7.0,7.0,8.0,0.0,1.0,0.0,Martedì,"Le Palme, Il Borgo, Villa del Parco",Nessuna,Nessuna,
-Crisante,Cameriera,7,6,5,8.0,9.0,9.0,1.0,0.0,0.0,Giovedì,"Le Palme, Hotel Castello Garden, Castello 4 Piano",Nessuna,Nessuna,
-Cunegonda,Cameriera,9,8,7,9.0,10.0,10.0,0.0,1.0,1.0,Mercoledì,"Castello 4 Piano, Le Palme, Le Ville",Nessuna,Nessuna,
-Dafne,Cameriera,8,10,6,10.0,8.0,7.0,1.0,1.0,0.0,Giovedì,"Hotel Castello Garden, Le Dune, Hotel Castello",Nessuna,Nessuna,
-Demifonte,Cameriera,7,9,5,6.0,6.0,6.0,0.0,0.0,0.0,Venerdì,"Bouganville, Villa del Parco",Nessuna,Nessuna,
-Desdemona,Cameriera,6,7,4,7.0,9.0,8.0,1.0,1.0,1.0,Nessuna,"Hotel Castello Garden, Il Borgo",Nessuna,Nessuna,
-Diodora,Cameriera,9,6,7,8.0,7.0,9.0,0.0,1.0,0.0,Sabato,"Bouganville, Castello 4 Piano, Il Borgo",Nessuna,Nessuna,
-Ebe,Cameriera,8,5,6,9.0,10.0,10.0,1.0,0.0,0.0,Giovedì,Castello 4 Piano,Nessuna,Nessuna,
-Edvige,Cameriera,7,8,5,10.0,8.0,7.0,0.0,1.0,1.0,Domenica,Villa del Parco,Nessuna,Nessuna,
-Egle,Cameriera,6,7,4,7.0,6.0,6.0,1.0,0.0,0.0,Lunedì,"Le Dune, Hotel Castello, Castello 4 Piano",Nessuna,Nessuna,
-Eliodora,Cameriera,9,9,7,8.0,9.0,8.0,0.0,1.0,0.0,Sabato,"Le Ville, Villa del Parco, Le Palme",Nessuna,Nessuna,
-Ermenegilda,Cameriera,8,8,6,9.0,7.0,9.0,1.0,1.0,1.0,Lunedì,"Villa del Parco, Le Ville",Nessuna,Nessuna,
-Eudossia,Cameriera,7,10,5,10.0,10.0,10.0,0.0,1.0,0.0,Martedì,"Castello 4 Piano, Hotel Castello, Le Dune",Nessuna,Nessuna,
-Eufemia,Cameriera,6,7,4,9.0,6.0,8.0,1.0,0.0,0.0,Mercoledì,"Il
+import streamlit as st
+import pandas as pd
+import os
+from datetime import datetime
+
+st.set_page_config(page_title="Executive Housekeeping - Master", layout="wide")
+
+# --- FILE DI SISTEMA ---
+FILE_DATA = 'housekeeping_database.csv'
+FILE_CONFIG = 'config_tempi.csv'
+FILE_HOTELS = 'hotel_list.csv'
+
+# --- FUNZIONE CARICAMENTO DATI (Blindata contro KeyError) ---
+def load_data():
+    cols = ["Nome", "Ruolo", "Professionalita", "Zone_Padronanza"]
+    if os.path.exists(FILE_DATA):
+        try:
+            df_temp = pd.read_csv(FILE_DATA)
+            if df_temp.empty or 'Nome' not in df_temp.columns:
+                return pd.DataFrame(columns=cols)
+            
+            # Pulizia dati: rimuove spazi e gestisce i valori nulli
+            for col in df_temp.columns:
+                df_temp[col] = df_temp[col].fillna("").astype(str).str.strip()
+            return df_temp
+        except:
+            return pd.DataFrame(columns=cols)
+    return pd.DataFrame(columns=cols)
+
+def load_hotels():
+    h_def = ["Hotel Castello", "Hotel Castello Garden", "Castello 4 Piano", "Le Dune", "Villa del Parco", "Bouganville", "Le Palme", "Il Borgo", "Le Ville"]
+    if os.path.exists(FILE_HOTELS):
+        try:
+            lista = pd.read_csv(FILE_HOTELS)['Nome_Hotel'].str.strip().tolist()
+            return [h for h in lista if h] if lista else h_def
+        except: return h_def
+    return h_def
+
+# Inizializzazione dati
+df = load_data()
+lista_hotel = load_hotels()
+
+# --- SIDEBAR: GESTIONE STAFF ---
+with st.sidebar:
+    st.header("⚙️ Gestione Staff")
+    if not df.empty:
+        st.download_button("📥 Scarica Backup CSV", data=df.to_csv(index=False).encode('utf-8'), file_name='backup_staff.csv')
+    
+    modo = st.radio("Azione:", ["Inserisci Nuova", "Modifica Esistente"])
+    dati = {}
+    nome_edit = None
+    
+    if modo == "Modifica Esistente" and not df.empty:
+        nome_edit = st.selectbox("Seleziona risorsa:", sorted(df['Nome'].tolist()))
+        dati = df[df['Nome'] == nome_edit].iloc[0].to_dict()
+
+    with st.form("staff_form"):
+        n_in = nome_edit if modo == "Modifica Esistente" else st.text_input("Nome e Cognome")
+        # Controllo ruolo governante
+        is_gov = st.checkbox("È una GOVERNANTE?", value=(str(dati.get('Ruolo', '')).lower() == "governante"))
+        prof = st.slider("Professionalità (1-10)", 1, 10, int(dati.get('Professionalita', 5) if dati.get('Professionalita') else 5))
+        
+        z_at = str(dati.get('Zone_Padronanza', "")).split(", ")
+        
+        if is_gov:
+            st.info("Assegnazione Fissa")
+            sel_z = st.multiselect("Hotel assegnati:", lista_hotel, default=[h for h in z_at if h in lista_hotel])
+            z_ass = ", ".join(sel_z)
+        else:
+            st.write("**Zone di Padronanza**")
+            sel_z = [h for h in lista_hotel if st.checkbox(h, key=f"s_{h}", value=(h in z_at))]
+            z_ass = ", ".join(sel_z)
+
+        if st.form_submit_button("SALVA SCHEDA"):
+            if n_in:
+                new_row = {
+                    "Nome": n_in.strip(), 
+                    "Ruolo": "Governante" if is_gov else "Cameriera", 
+                    "Professionalita": prof, 
+                    "Zone_Padronanza": z_ass
+                }
+                if modo == "Modifica Esistente":
+                    df = df[df['Nome'] != nome_edit]
+                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+                df.to_csv(FILE_DATA, index=False)
+                st.success("Database aggiornato!")
+                st.rerun()
+
+# --- TABS ---
+t1, t2, t3 = st.tabs(["🏆 Dashboard", "⚙️ Configurazione Tempi", "🚀 Planning Resort"])
+
+# --- TAB 1: DASHBOARD ---
+with t1:
+    if not df.empty:
+        c1, c2 = st.columns(2)
+        n_gov = len(df[df['Ruolo'].str.lower() == "governante"])
+        n_cam = len(df[df['Ruolo'].str.lower() == "cameriera"])
+        c1.metric("Governanti", n_gov)
+        c2.metric("Cameriere", n_cam)
+        st.dataframe(df[['Nome', 'Ruolo', 'Zone_Padronanza', 'Professionalita']], use_container_width=True)
+    else:
+        st.info("Database vuoto.")
+
+# --- TAB 2: CONFIGURAZIONE TEMPI ---
+with t2:
+    st.header("⚙️ Tempi per Camera (minuti)")
+    if os.path.exists(FILE_CONFIG):
+        conf = pd.read_csv(FILE_CONFIG)
+    else:
+        conf = pd.DataFrame([{"Hotel": h, "Arr_Ind": 60, "Fer_Ind": 30, "Arr_Gru": 45, "Fer_Gru": 20} for h in lista_hotel])
+
+    with st.form("config_tempi_form"):
+        up_c = []
+        for i, r in conf.iterrows():
+            if r['Hotel'] in lista_hotel:
+                st.write(f"#### 🏨 {r['Hotel']}")
+                c1, c2 = st.columns(2)
+                ai = c1.slider(f"Ind. Arrivo/Vuota", 5, 90, int(r.get('Arr_Ind', 60)), key=f"ai{i}")
+                fi = c1.slider(f"Ind. Fermata", 5, 90, int(r.get('Fer_Ind', 30)), key=f"fi{i}")
+                ag = c2.slider(f"Gru. Arrivo/Vuota", 5, 90, int(r.get('Arr_Gru', 45)), key=f"ag{i}")
+                fg = c2.slider(f"Gru. Fermata", 5, 90, int(r.get('Fer_Gru', 20)), key=f"fg{i}")
+                up_c.append({"Hotel": r['Hotel'], "Arr_Ind": ai, "Fer_Ind": fi, "Arr_Gru": ag, "Fer_Gru": fg})
+        
+        if st.form_submit_button("SALVA CONFIGURAZIONE"):
+            pd.DataFrame(up_c).to_csv(FILE_CONFIG, index=False)
+            st.success("Tempi salvati!")
+
+# --- TAB 3: PLANNING MATRICE ---
+with t3:
+    st.header("🚀 Piano Operativo Globale")
+    
+    # Gestione Riposi
+    st.subheader("🏖️ Gestione Assenze")
+    nomi_per_riposo = sorted(df['Nome'].tolist()) if not df.empty else []
+    personale_assente = st.multiselect("Seleziona chi è assente oggi (Cameriere e Gov):", nomi_per_riposo)
+    
+    st.divider()
+    
+    # Inserimento Carichi
+    st.subheader("📊 Matrice Carichi di Lavoro")
+    input_data = []
+    h_col = st.columns([2, 1, 1, 1, 1, 1, 1])
+    headers = ["HOTEL", "Arr.I", "Fer.I", "Vuo.I", "Arr.G", "Fer.G", "Vuo.G"]
+    for i, col in enumerate(h_col): col.caption(headers[i])
+
+    for h in lista_hotel:
+        c = st.columns([2, 1, 1, 1, 1, 1, 1])
+        c[0].markdown(f"**{h}**")
+        ai = c[1].number_input("", 0, 100, 0, key=f"ai_{h}", label_visibility="collapsed")
+        fi = c[2].number_input("", 0, 100, 0, key=f"fi_{h}", label_visibility="collapsed")
+        vi = c[3].number_input("", 0, 100, 0, key=f"vi_{h}", label_visibility="collapsed")
+        ag = c[4].number_input("", 0, 100, 0, key=f"ag_{h}", label_visibility="collapsed")
+        fg = c[5].number_input("", 0, 100, 0, key=f"fg_{h}", label_visibility="collapsed")
+        vg = c[6].number_input("", 0, 100, 0, key=f"vg_{h}", label_visibility="collapsed")
+        input_data.append({"Hotel": h, "AI": ai, "FI": fi, "VI": vi, "AG": ag, "FG": fg, "VG": vg})
+
+    if st.button("🚀 GENERA SCHIERAMENTO RESORT"):
+        if os.path.exists(FILE_CONFIG):
+            conf_df = pd.read_csv(FILE_CONFIG)
+            risultati = []
+            
+            # Filtro personale attivo
+            df_attive = df[~df['Nome'].isin(personale_assente)].copy()
+            già_assegnate = []
+
+            for row in input_data:
+                h_c = conf_df[conf_df['Hotel'] == row['Hotel']].iloc[0]
+                row['ore'] = ((row['AI'] + row['VI']) * h_c['Arr_Ind'] + (row['FI'] * h_c['Fer_Ind']) + 
+                              (row['AG'] + row['VG']) * h_c['Arr_Gru'] + (row['FG'] * h_c['Fer_Gru'])) / 60
+            
+            # Ordine per carico di lavoro
+            input_data = sorted(input_data, key=lambda x: x['ore'], reverse=True)
+
+            for row in input_data:
+                if row['ore'] > 0:
+                    # Cerca Governante
+                    gov_match = df_attive[(df_attive['Ruolo'].str.lower() == "governante") & (df_attive['Zone_Padronanza'].str.contains(row['Hotel'], na=False))]
+                    nomi_gov = ", ".join(gov_match['Nome'].tolist()) if not gov_match.empty else "🚨 DA ASSEGNARE"
+                    
+                    # Squadra Cameriere
+                    num_nec = round(row['ore'] / 7) if row['ore'] >= 7 else 1
+                    cam = df_attive[(df_attive['Ruolo'].str.lower() == "cameriera") & (df_attive['Zone_Padronanza'].str.contains(row['Hotel'], na=False)) & (~df_attive['Nome'].isin(già_assegnate))]
+                    
+                    if len(cam) < num_nec:
+                        jolly = df_attive[(df_attive['Ruolo'].str.lower() == "cameriera") & (~df_attive['Nome'].isin(già_assegnate)) & (~df_attive['Nome'].isin(cam['Nome']))].sort_values('Professionalita', ascending=False)
+                        cam = pd.concat([cam, jolly]).head(num_nec)
+                    else:
+                        cam = cam.head(num_nec)
+
+                    squadra_icon = []
+                    for _, c in cam.iterrows():
+                        già_assegnate.append(c['Nome'])
+                        icona = "📌" if len(str(c['Zone_Padronanza']).split(", ")) == 1 else "🔄"
+                        squadra_icon.append(f"{icona} {c['Nome']}")
+                    
+                    risultati.append({
+                        "Hotel": row['Hotel'],
+                        "Ore": round(row['ore'], 1),
+                        "Responsabile": nomi_gov,
+                        "Squadra": ", ".join(squadra_icon)
+                    })
+            
+            if risultati:
+                st.write("### 📋 Proposta di Schieramento")
+                st.caption("📌 Specialista | 🔄 Flessibile")
+                st.dataframe(pd.DataFrame(risultati), use_container_width=True)
+            else:
+                st.warning("Inserire carichi di lavoro per generare il piano.")
