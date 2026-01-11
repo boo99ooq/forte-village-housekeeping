@@ -170,19 +170,33 @@ with t_staff:
             st.write("**Gestione Riposi**")
             opzioni_r = ["Nessuno", "Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica", "DATA SPECIFICA"]
             
+            # Recupero valore salvato
             val_rip = str(curr['Riposo_Pref']) if curr is not None else "Nessuno"
-            idx_r = opzioni_r.index(val_rip) if val_rip in opzioni_r else (8 if val_rip != "" and val_rip != "nan" else 0)
             
+            # Cerchiamo di capire se è un giorno o una data
+            idx_r = 0
+            data_default = datetime.now()
+            
+            if val_rip in opzioni_r[:-1]: # È un giorno della settimana
+                idx_r = opzioni_r.index(val_rip)
+            elif val_rip != "" and val_rip != "nan" and val_rip != "Nessuno":
+                idx_r = 8 # Imposta su DATA SPECIFICA
+                try:
+                    data_default = datetime.strptime(val_rip, "%d/%m/%Y")
+                except:
+                    pass
+
+            # Visualizziamo i due campi uno sotto l'altro
             f_rip_tipo = st.selectbox("Tipo Riposo", opzioni_r, index=idx_r)
             
-            f_rip_final = f_rip_tipo
+            # Il calendario è sempre visibile per evitare blocchi del form, 
+            # ma lo usiamo solo se il tipo è DATA SPECIFICA
+            f_data_s = st.date_input("Calendario (solo per Data Specifica)", data_default)
+            
             if f_rip_tipo == "DATA SPECIFICA":
-                try:
-                    d_def = datetime.strptime(val_rip, "%d/%m/%Y")
-                except:
-                    d_def = datetime.now()
-                f_data_s = st.date_input("Seleziona data", d_def)
                 f_rip_final = f_data_s.strftime("%d/%m/%Y")
+            else:
+                f_rip_final = f_rip_tipo
 
         st.divider()
         
