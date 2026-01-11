@@ -240,7 +240,7 @@ with t_tempi:
             "COP": r[5].number_input("COP", 0, 100, 0, key=f"p_co_{h}", label_visibility="collapsed"),
             "BIAN": r[6].number_input("BIAN", 0, 100, 0, key=f"p_bi_{h}", label_visibility="collapsed")
         } 
-        # --- SALVATAGGIO DATI ZONA ---
+    
         if t_h:
                 n_gov = len([n for n in t_h if "⭐" in n])
                 n_spl = len([n for n in t_h if "🌙" in n])
