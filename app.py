@@ -9,6 +9,7 @@ st.set_page_config(page_title="Executive Housekeeping - Master", layout="wide")
 FILE_DATA = 'housekeeping_database.csv'
 FILE_CONFIG = 'config_tempi.csv'
 FILE_HOTELS = 'hotel_list.csv'
+FILE_LAST_PLAN = 'ultimo_planning_caricato.csv' # File per congelare i dati
 
 # --- CARICAMENTO DATI ---
 def load_data():
@@ -26,73 +27,32 @@ def load_data():
 
 def load_hotels():
     h_def = ["Hotel Castello", "Hotel Castello Garden", "Castello 4 Piano", "Le Dune", "Villa del Parco", "Bouganville", "Le Palme", "Il Borgo", "Le Ville"]
-    if os.path.exists(FILE_HOTELS):
-        try:
-            lista = pd.read_csv(FILE_HOTELS)['Nome_Hotel'].str.strip().tolist()
-            return [h for h in lista if h] if lista else h_def
-        except: return h_def
-    return h_def
+    return h_def # Semplificato per stabilità
 
 df = load_data()
 lista_hotel = load_hotels()
 
-# --- SIDEBAR (Gestione Staff) ---
-with st.sidebar:
-    st.header("⚙️ Gestione Staff")
-    modo = st.radio("Azione:", ["Inserisci Nuova", "Modifica Esistente"])
-    dati = {}
-    nome_edit = None
-    if modo == "Modifica Esistente" and not df.empty:
-        nome_edit = st.selectbox("Seleziona risorsa:", sorted(df['Nome'].tolist()))
-        dati = df[df['Nome'] == nome_edit].iloc[0].to_dict()
-
-    with st.form("staff_form"):
-        n_in = nome_edit if modo == "Modifica Esistente" else st.text_input("Nome")
-        is_gov = st.checkbox("Governante", value=(str(dati.get('Ruolo','')).lower() == "governante"))
-        prof = st.slider("Professionalità", 1, 10, int(dati.get('Professionalita', 5)))
-        z_at = str(dati.get('Zone_Padronanza', "")).split(", ")
-        
-        if is_gov:
-            sel_z = st.multiselect("Hotel assegnati:", lista_hotel, default=[h for h in z_at if h in lista_hotel])
-            z_ass = ", ".join(sel_z)
-        else:
-            sel_z = [h for h in lista_hotel if st.checkbox(h, key=f"s_{h}", value=(h in z_at))]
-            z_ass = ", ".join(sel_z)
-
-        if st.form_submit_button("SALVA SCHEDA"):
-            if n_in:
-                new = {"Nome": n_in.strip(), "Ruolo": "Governante" if is_gov else "Cameriera", "Professionalita": prof, "Zone_Padronanza": z_ass}
-                if modo == "Modifica Esistente": df = df[df['Nome'] != nome_edit]
-                df = pd.concat([df, pd.DataFrame([new])], ignore_index=True)
-                df.to_csv(FILE_DATA, index=False)
-                st.rerun()
-
 # --- TABS ---
-t1, t2, t3 = st.tabs(["🏆 Dashboard", "⚙️ Configurazione Tempi", "🚀 Planning Resort"])
+t1, t2, t3 = st.tabs(["🏆 Dashboard Staff", "⚙️ Configurazione Tempi", "🚀 Planning Resort"])
 
+# --- TAB 1: STAFF (Invariato) ---
 with t1:
-    if not df.empty:
-        st.dataframe(df[['Nome', 'Ruolo', 'Zone_Padronanza', 'Professionalita']], use_container_width=True)
+    st.dataframe(df[['Nome', 'Ruolo', 'Zone_Padronanza', 'Professionalita']], use_container_width=True)
 
-# --- TAB 2: CONFIGURAZIONE TEMPI (NUOVA GRIGLIA) ---
+# --- TAB 2: TEMPI (Congelati nel file config_tempi.csv) ---
 with t2:
-    st.header("⚙️ Griglia Tempi per Camera")
-    st.write("Imposta i minuti necessari per ogni tipologia di camera:")
-
+    st.header("⚙️ Griglia Tempi Standard")
     if os.path.exists(FILE_CONFIG):
         c_df = pd.read_csv(FILE_CONFIG)
     else:
         c_df = pd.DataFrame([{"Hotel": h, "Arr_Ind": 60, "Fer_Ind": 30, "Arr_Gru": 45, "Fer_Gru": 20} for h in lista_hotel])
 
     new_config = []
-    
-    # Intestazione
     h_c = st.columns([2, 1, 1, 1, 1])
     headers = ["HOTEL", "Arr. Indiv.", "Fer. Indiv.", "Arr. Gruppo", "Fer. Gruppo"]
     for i, txt in enumerate(headers): h_c[i].caption(txt)
 
     for h in lista_hotel:
-        # Recupera valori esistenti o usa default
         row_exist = c_df[c_df['Hotel'] == h]
         val_ai = int(row_exist.iloc[0]['Arr_Ind']) if not row_exist.empty else 60
         val_fi = int(row_exist.iloc[0]['Fer_Ind']) if not row_exist.empty else 30
@@ -101,56 +61,76 @@ with t2:
 
         cols = st.columns([2, 1, 1, 1, 1])
         cols[0].markdown(f"**{h}**")
-        ai = cols[1].number_input("", 5, 120, val_ai, key=f"conf_ai_{h}", label_visibility="collapsed")
-        fi = cols[2].number_input("", 5, 120, val_fi, key=f"conf_fi_{h}", label_visibility="collapsed")
-        ag = cols[3].number_input("", 5, 120, val_ag, key=f"conf_ag_{h}", label_visibility="collapsed")
-        fg = cols[4].number_input("", 5, 120, val_fg, key=f"conf_fg_{h}", label_visibility="collapsed")
-        
+        ai = cols[1].number_input("", 5, 120, val_ai, key=f"c_ai_{h}", label_visibility="collapsed")
+        fi = cols[2].number_input("", 5, 120, val_fi, key=f"c_fi_{h}", label_visibility="collapsed")
+        ag = cols[3].number_input("", 5, 120, val_ag, key=f"c_ag_{h}", label_visibility="collapsed")
+        fg = cols[4].number_input("", 5, 120, val_fg, key=f"c_fg_{h}", label_visibility="collapsed")
         new_config.append({"Hotel": h, "Arr_Ind": ai, "Fer_Ind": fi, "Arr_Gru": ag, "Fer_Gru": fg})
 
-    if st.button("💾 SALVA TUTTI I TEMPI"):
+    if st.button("💾 CONGELA TEMPI"):
         pd.DataFrame(new_config).to_csv(FILE_CONFIG, index=False)
-        st.success("Tutti i tempi sono stati aggiornati con successo!")
+        st.success("Tempi congelati con successo!")
 
-# --- TAB 3: PLANNING (MATRICE) ---
+# --- TAB 3: PLANNING (CON SALVATAGGIO STATO) ---
 with t3:
     st.header("🚀 Piano Operativo Resort")
+    
+    # Caricamento dell'ultimo stato salvato per il planning
+    if os.path.exists(FILE_LAST_PLAN):
+        last_plan_df = pd.read_csv(FILE_LAST_PLAN)
+    else:
+        last_plan_df = pd.DataFrame(columns=["Hotel", "AI", "FI", "VI", "AG", "FG", "VG"])
+
     nomi_per_riposo = sorted(df['Nome'].tolist()) if not df.empty else []
     personale_assente = st.multiselect("🏖️ Seleziona chi è assente oggi:", nomi_per_riposo)
     
     st.divider()
     
-    input_data = []
+    current_input = []
     h_col = st.columns([2, 1, 1, 1, 1, 1, 1])
     headers_p = ["HOTEL", "Arr.I", "Fer.I", "Vuo.I", "Arr.G", "Fer.G", "Vuo.G"]
     for i, col in enumerate(h_col): col.caption(headers_p[i])
 
     for h in lista_hotel:
+        # Recupero i valori congelati per questo hotel
+        p_row = last_plan_df[last_plan_df['Hotel'] == h]
+        v_ai = int(p_row.iloc[0]['AI']) if not p_row.empty else 0
+        v_fi = int(p_row.iloc[0]['FI']) if not p_row.empty else 0
+        v_vi = int(p_row.iloc[0]['VI']) if not p_row.empty else 0
+        v_ag = int(p_row.iloc[0]['AG']) if not p_row.empty else 0
+        v_fg = int(p_row.iloc[0]['FG']) if not p_row.empty else 0
+        v_vg = int(p_row.iloc[0]['VG']) if not p_row.empty else 0
+
         c = st.columns([2, 1, 1, 1, 1, 1, 1])
         c[0].markdown(f"**{h}**")
-        ai = c[1].number_input("", 0, 100, 0, key=f"p_ai_{h}", label_visibility="collapsed")
-        fi = c[2].number_input("", 0, 100, 0, key=f"p_fi_{h}", label_visibility="collapsed")
-        vi = c[3].number_input("", 0, 100, 0, key=f"p_vi_{h}", label_visibility="collapsed")
-        ag = c[4].number_input("", 0, 100, 0, key=f"p_ag_{h}", label_visibility="collapsed")
-        fg = c[5].number_input("", 0, 100, 0, key=f"p_fg_{h}", label_visibility="collapsed")
-        vg = c[6].number_input("", 0, 100, 0, key=f"p_vg_{h}", label_visibility="collapsed")
-        input_data.append({"Hotel": h, "AI": ai, "FI": fi, "VI": vi, "AG": ag, "FG": fg, "VG": vg})
+        ai = c[1].number_input("", 0, 100, v_ai, key=f"p_ai_{h}", label_visibility="collapsed")
+        fi = c[2].number_input("", 0, 100, v_fi, key=f"p_fi_{h}", label_visibility="collapsed")
+        vi = c[3].number_input("", 0, 100, v_vi, key=f"p_vi_{h}", label_visibility="collapsed")
+        ag = c[4].number_input("", 0, 100, v_ag, key=f"p_ag_{h}", label_visibility="collapsed")
+        fg = c[5].number_input("", 0, 100, v_fg, key=f"p_fg_{h}", label_visibility="collapsed")
+        vg = c[6].number_input("", 0, 100, v_vg, key=f"p_vg_{h}", label_visibility="collapsed")
+        current_input.append({"Hotel": h, "AI": ai, "FI": fi, "VI": vi, "AG": ag, "FG": fg, "VG": vg})
 
-    if st.button("🚀 GENERA PIANO RESORT"):
+    c1, c2 = st.columns(2)
+    
+    if c1.button("🚀 GENERA E CONGELA DATI"):
+        # Salviamo lo stato attuale nel file CSV
+        pd.DataFrame(current_input).to_csv(FILE_LAST_PLAN, index=False)
+        
         if os.path.exists(FILE_CONFIG):
             conf_df = pd.read_csv(FILE_CONFIG)
             risultati = []
             df_attive = df[~df['Nome'].isin(personale_assente)].copy()
             già_assegnate = []
 
-            for row in input_data:
+            for row in current_input:
                 h_c = conf_df[conf_df['Hotel'] == row['Hotel']].iloc[0]
                 row['ore'] = ((row['AI'] + row['VI']) * h_c['Arr_Ind'] + (row['FI'] * h_c['Fer_Ind']) + 
                               (row['AG'] + row['VG']) * h_c['Arr_Gru'] + (row['FG'] * h_c['Fer_Gru'])) / 60
             
-            input_data = sorted(input_data, key=lambda x: x['ore'], reverse=True)
+            input_sorted = sorted(current_input, key=lambda x: x['ore'], reverse=True)
 
-            for row in input_data:
+            for row in input_sorted:
                 if row['ore'] > 0:
                     gov = df_attive[(df_attive['Ruolo'].str.lower() == "governante") & (df_attive['Zone_Padronanza'].str.contains(row['Hotel'], na=False))]
                     nomi_gov = ", ".join(gov['Nome'].tolist()) if not gov.empty else "🚨 Jolly"
@@ -161,14 +141,16 @@ with t3:
                         cam = pd.concat([cam, jolly]).head(num_nec)
                     else: cam = cam.head(num_nec)
                     
-                    s_list = []
-                    for _, c in cam.iterrows():
-                        già_assegnate.append(c['Nome'])
-                        icon = "📌" if len(str(c['Zone_Padronanza']).split(", ")) == 1 else "🔄"
-                        s_list.append(f"{icon} {c['Nome']}")
+                    s_list = [f"{('📌' if len(str(c['Zone_Padronanza']).split(', ')) == 1 else '🔄')} {c['Nome']}" for _, c in cam.iterrows()]
+                    for _, c in cam.iterrows(): già_assegnate.append(c['Nome'])
                     
                     risultati.append({"Hotel": row['Hotel'], "Ore": round(row['ore'], 1), "Resp": nomi_gov, "Squadra": ", ".join(s_list)})
             
             if risultati:
                 st.write("### 📋 Schieramento Resort")
                 st.table(pd.DataFrame(risultati))
+
+    if c2.button("🧹 RESETTA MATRICE"):
+        if os.path.exists(FILE_LAST_PLAN):
+            os.remove(FILE_LAST_PLAN)
+            st.rerun()
