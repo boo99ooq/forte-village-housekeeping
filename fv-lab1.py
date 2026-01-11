@@ -246,9 +246,10 @@ with t_tempi:
         if st.button("🚀 GENERA SCHIERAMENTO", use_container_width=True):
             ris = []
             conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
-            attive_calc = df[~df['Nome'].isin(assenti)].copy()
+            if not conf_df.empty:
+                conf_df.columns = [str(c).strip().upper() for c in conf_df.columns]
             
-            # Pool Spezzati (🌙)
+            attive_calc = df[~df['Nome'].isin(assenti)].copy()
             pool_spl = attive_calc[attive_calc['Ruolo'] == 'Cameriera']['Nome'].head(4).tolist()
             st.session_state['spl_v_fin'] = pool_spl
             
@@ -269,16 +270,13 @@ with t_tempi:
             gia_a = set()
             for zona in z_ord:
                 o_n, t_h, o_f = fabb.get(zona, 0), [], 0
-                # 1. Governanti ⭐
                 gv = attive_calc[(attive_calc['Ruolo'] == 'Governante') & (~attive_calc['Nome'].isin(gia_a))]
                 for _, g in gv[gv['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)].iterrows():
                     t_h.append(f"⭐ {g['Nome']} (Gov.)"); gia_a.add(g['Nome'])
                 
-                # 2. Cameriere (Icone Forzate)
                 cand = attive_calc[(attive_calc['Ruolo'] == 'Cameriera') & (~attive_calc['Nome'].isin(gia_a))].copy()
                 for _, p in cand.iterrows():
                     if o_f < (o_n if o_n > 0 else 7.5):
-                        # Controllo Part-time e Spezzato
                         is_pt = str(p.get('Part_Time', '0')) in ['1', '1.0', 'True']
                         ico = "🌙 " if p['Nome'] in pool_spl else ("🕒 " if is_pt else "")
                         t_h.append(f"{ico}{p['Nome']}"); gia_a.add(p['Nome'])
@@ -288,7 +286,12 @@ with t_tempi:
                 if t_h:
                     n_gov = len([n for n in t_h if "⭐" in n])
                     n_cam = len(t_h) - n_gov
-                    info = f"G:{n_gov} | Cam:{n_cam} (Coppie:{n_cam/2}) | PT:{len([n for n in t_h if '🕒' in n])} 🌙:{len([n for n in t_h if '🌙' in n])}"
+                    n_spl = len([n for n in t_h if "🌙" in n])
+                    n_pt = len([n for n in t_h if "🕒" in n])
+                    n_std = n_cam - n_spl - n_pt # Queste sono le cameriere full-time
+                    
+                    # Info etichetta con conteggio Pomeridiane
+                    info = f"G:{n_gov} | Cam:{n_cam} (Coppie:{n_cam/2}) | Pome:{n_std} | 🕒:{n_pt} 🌙:{n_spl}"
                     ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Req": round(o_n, 1), "Info": info})
             
             st.session_state['res_v_fin'] = ris
