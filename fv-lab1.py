@@ -261,37 +261,62 @@ with t_plan:
         # 3. Prepari le variabili e inizi il ciclo
         gia_a, ris = set(), []
         for zona in z_ord:
-            # Questa riga "pulisce" il team per ogni nuova zona che il ciclo analizza
             o_n, t_h, o_f = fabb.get(zona, 0), [], 0
             
-            # Governanti
+            # --- 1. GOVERNANTI (⭐) ---
             gov = attive[(attive['Ruolo'] == 'Governante') & (~attive['Nome'].isin(gia_a))]
-            # Filtro per padronanza zona
             mask_g = gov['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)
-            
             for _, g in gov[mask_g].iterrows():
                 t_h.append(f"⭐ {g['Nome']} (Gov.)")
                 gia_a.add(g['Nome'])
-            # Cameriere
+            
+            # --- 2. CAMERIERE ---
             if o_n > 0 or zona in ["Hotel Castello", "Hotel Castello 4 Piano"]:
                 cand = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
                 cand['Pr'] = cand['Zone_Padronanza'].apply(lambda x: 0 if zona.replace("Hotel ", "").lower() in str(x).lower() else 1)
+                
                 for _, p in cand.sort_values('Pr').iterrows():
                     if p['Nome'] in gia_a: continue
+                    
                     if o_f < (o_n if o_n > 0 else 7.5):
-                        t_h.append(p['Nome']); gia_a.add(p['Nome'])
-                        o_f += 5.0 if (p['Part_Time'] or p['Nome'] in pool_spl) else 7.5
+                        # Controllo Icone: Spezzato o Part-Time
+                        is_spl = p['Nome'] in pool_spl
+                        is_pt = p['Part_Time'] == 1
+                        ico = "🌙 " if is_spl else ("🕒 " if is_pt else "")
+                        
+                        t_h.append(f"{ico}{p['Nome']}")
+                        gia_a.add(p['Nome'])
+                        o_f += 5.0 if (is_pt or is_spl) else 7.5
+                        
+                        # Partner (con icone anche per lui)
                         c_pre = str(p.get('Lavora_Bene_Con', '')).strip()
                         if c_pre in attive['Nome'].values and c_pre not in gia_a:
-                            t_h.append(c_pre); gia_a.add(c_pre)
-                            o_f += 5.0 if (attive[attive['Nome']==c_pre].iloc[0]['Part_Time'] or c_pre in pool_spl) else 7.5
-                    else: break
+                            p_c = attive[attive['Nome'] == c_pre].iloc[0]
+                            is_spl_c = c_pre in pool_spl
+                            is_pt_c = p_c['Part_Time'] == 1
+                            ico_c = "🌙 " if is_spl_c else ("🕒 " if is_pt_c else "")
+                            
+                            t_h.append(f"{ico_c}{c_pre}")
+                            gia_a.add(c_pre)
+                            o_f += 5.0 if (is_pt_c or is_spl_c) else 7.5
+                    else:
+                        break
+            
+            # --- 3. CHIUSURA TEAM ---
             if t_h: 
+                # Se il numero di cameriere è dispari, aggiungiamo un rinforzo
                 if len([n for n in t_h if "Gov." not in n]) % 2 != 0:
                     rest = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))]
-                    if not rest.empty: rinf = rest.iloc[0]['Nome']; t_h.append(rinf); gia_a.add(rinf)
+                    if not rest.empty:
+                        r_p = rest.iloc[0]
+                        is_spl_r = r_p['Nome'] in pool_spl
+                        is_pt_r = r_p['Part_Time'] == 1
+                        ico_r = "🌙 " if is_spl_r else ("🕒 " if is_pt_r else "")
+                        
+                        t_h.append(f"{ico_r}{r_p['Nome']}")
+                        gia_a.add(r_p['Nome'])
+                
                 ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Req": round(o_n, 1)})
-        st.session_state['res_v_fin'] = ris
 
     if 'res_v_fin' in st.session_state:
         st.divider(); final_l = []
