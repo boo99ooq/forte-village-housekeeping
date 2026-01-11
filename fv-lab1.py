@@ -286,6 +286,7 @@ with t_plan:
         
         fabb = {}
         for h in lista_hotel:
+            st.write(conf_df.columns.tolist())
             m = conf_df[conf_df['Hotel'] == h]
             m_ai, m_fi, m_ag, m_fg = (m.iloc[0]['AI'], m.iloc[0]['FI'], m.iloc[0]['AG'], m.iloc[0]['FG']) if not m.empty else (60, 30, 45, 25)
             tot_fer = cur_inp[h]["FI"] + cur_inp[h]["FG"]
