@@ -247,11 +247,16 @@ with t_plan:
             tot_f = cur_inp[h]["FI"] + cur_inp[h]["FG"]
             fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["AG"]*m_ag + cur_inp[h]["FG"]*m_fg + tot_f*15) / 60
         
-        # 4. Calcolo Macro (Ora fabb esiste sicuramente!)
-        fabb["MACRO: PALME & GARDEN"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)      
+        ## 1. Calcoli la Macro (Fabbisogno Palme + Garden)
+        fabb["MACRO: PALME & GARDEN"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
+        
+        # 2. Crei la lista d'ordine (Z_ORD) - Questa riga mancava o era spostata!
+        z_ord = ["Hotel Castello", "Hotel Castello 4 Piano", "MACRO: PALME & GARDEN"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
+        
+        # 3. Prepari le variabili e inizi il ciclo
         gia_a, ris = set(), []
         for zona in z_ord:
-            o_n, t_h, o_f = fabb.get(zona, 0), [], 0
+            # ... qui segue tutto il resto del codice ...
             # Governanti
             gov = attive[(attive['Ruolo'] == 'Governante') & (~attive['Nome'].isin(gia_a))]
             for _, g in gov[gov['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)].iterrows():
