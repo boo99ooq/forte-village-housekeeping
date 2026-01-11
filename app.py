@@ -31,7 +31,7 @@ def load_hotels():
 df = load_data()
 lista_hotel = load_hotels()
 
-# --- SIDEBAR: GESTIONE STAFF ---
+# --- SIDEBAR (Rimane invariata per la gestione staff) ---
 with st.sidebar:
     st.header("⚙️ Gestione Personale")
     if not df.empty:
@@ -48,13 +48,12 @@ with st.sidebar:
         n_in = nome_edit if modo == "Modifica Esistente" else st.text_input("Nome")
         is_gov = st.checkbox("Governante", value=(dati.get('Ruolo') == "Governante"))
         prof = st.slider("Professionalità", 1, 10, int(dati.get('Professionalita', 5) if dati.get('Professionalita') else 5))
-        
         z_at = str(dati.get('Zone_Padronanza', "")).split(", ")
+        
         if is_gov:
             sel_z = st.multiselect("Hotel (Max 2):", lista_hotel, default=[h for h in z_at if h in lista_hotel], max_selections=2)
             z_ass = ", ".join(sel_z)
         else:
-            st.write("**Zone di Padronanza**")
             sel_z = [h for h in lista_hotel if st.checkbox(h, key=f"s_{h}", value=(h in z_at))]
             z_ass = ", ".join(sel_z)
 
@@ -95,6 +94,16 @@ with t2:
 
 with t3:
     st.header("🚀 Piano Operativo Globale")
+    
+    # --- BOX RIPOSI ---
+    st.subheader("🏖️ Gestione Assenze")
+    tutte_cameriere = sorted(df[df['Ruolo'] == "Cameriera"]['Nome'].tolist())
+    cameriere_riposo = st.multiselect("Seleziona le cameriere a riposo oggi:", tutte_cameriere)
+    
+    st.divider()
+    
+    # --- MATRICE CARICHI ---
+    st.subheader("📊 Inserimento Carichi di Lavoro")
     input_data = []
     h_col = st.columns([2, 1, 1, 1, 1, 1, 1])
     headers = ["HOTEL", "Arr.I", "Fer.I", "Vuo.I", "Arr.G", "Fer.G", "Vuo.G"]
@@ -115,28 +124,32 @@ with t3:
         if os.path.exists(FILE_CONFIG):
             conf_df = pd.read_csv(FILE_CONFIG)
             risultati = []
-            già_assegnate = [] # Lista per evitare doppioni
+            
+            # Filtriamo subito chi è a riposo dal calcolo
+            df_attive = df[~df['Nome'].isin(cameriere_riposo)].copy()
+            già_assegnate = [] 
 
-            # Ordiniamo gli hotel per carico di lavoro (più pesanti prima)
+            # Calcolo ore preventivo per ogni hotel
             for row in input_data:
                 h_c = conf_df[conf_df['Hotel'] == row['Hotel']].iloc[0]
                 row['ore'] = ((row['AI'] + row['VI']) * h_c['Arr_Ind'] + (row['FI'] * h_c['Fer_Ind']) + (row['AG'] + row['VG']) * h_c['Arr_Gru'] + (row['FG'] * h_c['Fer_Gru'])) / 60
             
+            # Ordiniamo per carico di lavoro
             input_data = sorted(input_data, key=lambda x: x['ore'], reverse=True)
 
             for row in input_data:
                 if row['ore'] > 0:
-                    gov = df[(df['Ruolo'] == "Governante") & (df['Zone_Padronanza'].str.contains(row['Hotel'], na=False))]
+                    gov = df_attive[(df_attive['Ruolo'] == "Governante") & (df_attive['Zone_Padronanza'].str.contains(row['Hotel'], na=False))]
                     nomi_gov = ", ".join(gov['Nome'].tolist()) if not gov.empty else "Jolly"
                     
                     num_nec = round(row['ore'] / 7) if row['ore'] >= 7 else 1
                     
-                    # Filtro cameriere per zona che non siano già state "prese" da un altro hotel nel calcolo
-                    cam = df[(df['Ruolo'] == "Cameriera") & (df['Zone_Padronanza'].str.contains(row['Hotel'], na=False)) & (~df['Nome'].isin(già_assegnate))]
+                    # Filtro cameriere attive e di zona non ancora assegnate
+                    cam = df_attive[(df_attive['Ruolo'] == "Cameriera") & (df_attive['Zone_Padronanza'].str.contains(row['Hotel'], na=False)) & (~df_attive['Nome'].isin(già_assegnate))]
                     
-                    # Se finiscono quelle di zona, prendiamo le Jolly (non ancora assegnate)
+                    # Se non bastano quelle di zona, prendiamo le altre attive (Jolly)
                     if len(cam) < num_nec:
-                        jolly = df[(df['Ruolo'] == "Cameriera") & (~df['Nome'].isin(già_assegnate)) & (~df['Nome'].isin(cam['Nome']))].sort_values('Professionalita', ascending=False)
+                        jolly = df_attive[(df_attive['Ruolo'] == "Cameriera") & (~df_attive['Nome'].isin(già_assegnate)) & (~df_attive['Nome'].isin(cam['Nome']))].sort_values('Professionalita', ascending=False)
                         cam = pd.concat([cam, jolly]).head(num_nec)
                     else:
                         cam = cam.head(num_nec)
@@ -152,5 +165,5 @@ with t3:
             
             if risultati:
                 st.write("### 📋 Proposta di Schieramento")
-                st.caption("📌 = Specialista (1 zona) | 🔄 = Flessibile (Più zone)")
+                st.caption(f"Cameriere totali a riposo: {len(cameriere_riposo)} | Disponibili: {len(df_attive[df_attive['Ruolo']=='Cameriera'])}")
                 st.table(pd.DataFrame(risultati))
