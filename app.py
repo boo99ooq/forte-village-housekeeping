@@ -36,6 +36,7 @@ def save_data(df):
 def get_rating_bar(row):
     try:
         if 'overnante' in str(row.get('Ruolo', '')).lower(): return "⭐ (Coord.)", 10.0
+        # Calcolo media pesata per mattoncini
         v = (pd.to_numeric(row.get('Professionalita', 5))*0.25 + pd.to_numeric(row.get('Esperienza', 5))*0.20 + 
              pd.to_numeric(row.get('Tenuta_Fisica', 5))*0.20 + pd.to_numeric(row.get('Disponibilita', 5))*0.15 + 
              pd.to_numeric(row.get('Empatia', 5))*0.10 + pd.to_numeric(row.get('Capacita_Guida', 5))*0.10)
@@ -78,22 +79,42 @@ with st.sidebar:
     with st.form("form_staff"):
         f_nome = st.text_input("Nome", value=str(current['Nome']) if current is not None else "")
         f_ruolo = st.selectbox("Ruolo", ["Cameriera", "Governante"], index=0 if not current or "Cameriera" in str(current['Ruolo']) else 1)
-        f_pt = st.checkbox("🕒 Part-Time", value=bool(current['Part_Time']) if current is not None else False)
-        f_ind = st.checkbox("🚫 No Spezzato", value=bool(current['Indisp_Spezzato']) if current is not None else False)
-        f_auto = st.selectbox("Viaggia con...", ["Nessuno"] + [n for n in lista_nomi if n != f_nome])
+        c_opt = st.columns(2)
+        f_pt = c_opt[0].checkbox("🕒 Part-Time", value=bool(current['Part_Time']) if current is not None else False)
+        f_ind = c_opt[1].checkbox("🚫 No Spezzato", value=bool(current['Indisp_Spezzato']) if current is not None else False)
+        opzioni_auto = ["Nessuno"] + [n for n in lista_nomi if n != f_nome]
+        f_auto = st.selectbox("Viaggia con...", opzioni_auto)
         f_zone = st.selectbox("Zona Padronanza", lista_hotel, index=lista_hotel.index(str(current['Zone_Padronanza'])) if current is not None and str(current['Zone_Padronanza']) in lista_hotel else 0)
         st.write("**Valutazioni (1-10)**")
         v_pro = st.slider("Professionalità", 1, 10, int(current['Professionalita']) if current is not None else 5)
         v_esp = st.slider("Esperienza", 1, 10, int(current['Esperienza']) if current is not None else 5)
+        v_ten = st.slider("Tenuta Fisica", 1, 10, int(current['Tenuta_Fisica']) if current is not None else 5)
+        v_dis = st.slider("Disponibilità", 1, 10, int(current['Disponibilita']) if current is not None else 5)
+        v_emp = st.slider("Empatia", 1, 10, int(current['Empatia']) if current is not None else 5)
+        v_gui = st.slider("Guida", 1, 10, int(current['Capacita_Guida']) if current is not None else 5)
         if st.form_submit_button("💾 SALVA"):
             nuova_d = {"Nome": f_nome, "Ruolo": f_ruolo, "Part_Time": 1 if f_pt else 0, "Indisp_Spezzato": 1 if f_ind else 0, 
-                       "Auto": f_auto, "Zone_Padronanza": f_zone, "Professionalita": v_pro, "Esperienza": v_esp}
+                       "Auto": f_auto, "Zone_Padronanza": f_zone, "Professionalita": v_pro, "Esperienza": v_esp,
+                       "Tenuta_Fisica": v_ten, "Disponibilita": v_dis, "Empatia": v_emp, "Capacita_Guida": v_gui}
             if current is not None: df = df[df['Nome'] != sel]
             df = pd.concat([df, pd.DataFrame([nuova_d])], ignore_index=True)
             save_data(df); st.rerun()
 
 # --- TABS ---
 t1, t2, t3, t4 = st.tabs(["🏆 Dashboard", "⚙️ Tempi", "🚀 Planning", "📅 Storico"])
+
+with t1:
+    st.header("🏆 Performance Staff")
+    if not df.empty:
+        # Applica i mattoncini colorati
+        df[['Performance', 'Rating_Num']] = df.apply(lambda r: pd.Series(get_rating_bar(r)), axis=1)
+        df['Tipo'] = df['Part_Time'].apply(lambda x: "🕒 PT" if x == 1 else "FULL")
+        
+        # Tabella pulita e ordinata
+        st.dataframe(df[['Nome', 'Ruolo', 'Tipo', 'Performance', 'Conteggio_Spezzati', 'Auto', 'Zone_Padronanza']], 
+                     use_container_width=True, hide_index=True)
+    else:
+        st.info("Database vuoto. Aggiungi personale dalla sidebar.")
 
 with t2:
     st.header("⚙️ Configurazione Tempi Standard")
@@ -129,7 +150,6 @@ with t3:
     if st.button("🚀 GENERA SCHIERAMENTO"):
         conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
         attive = df[(~df['Nome'].isin(assenti))].copy()
-        
         pool_split = attive[(attive['Part_Time'] == 0) & (attive['Indisp_Spezzato'] == 0) & (attive['Ruolo'] == 'Cameriera')].sort_values('Conteggio_Spezzati').head(4)['Nome'].tolist()
         
         def calc_ore(hotel_nome):
@@ -139,7 +159,6 @@ with t3:
             return (base + extra) / 60
 
         fabbisogni = {h: calc_ore(h) for h in lista_hotel}
-        # Accorpamento logico Palme & Garden
         fabbisogni["MACRO: PALME & GARDEN"] = fabbisogni.get("Le Palme", 0) + fabbisogni.get("Hotel Castello Garden", 0)
         
         zone_lavoro = [h for h in lista_hotel if h not in ["Le Palme", "Hotel Castello Garden"]] + ["MACRO: PALME & GARDEN"]
@@ -172,11 +191,6 @@ with t3:
                 current_t = [n.strip() for n in r['Team'].split(",")]
                 opzioni = sorted(list(set(current_t) | set(st.session_state['libere'])))
                 edit_t = st.multiselect(f"Team {r['Hotel']}", opzioni, default=current_t, key=f"ed_{i}")
-                
-                # Ricalcolo ore dinamico nel multiselect
-                ore_check = sum([5.0 if (df[df['Nome']==n.replace('⭐ ','').replace(' (Gov.)','')].iloc[0]['Part_Time']==1 or n.replace('⭐ ','').replace(' (Gov.)','') in st.session_state['spl']) else 7.5 for n in edit_t if '(Gov.)' not in n])
-                if ore_check < r['Ore Nec']: st.warning(f"Sotto-organico: {round(ore_check,1)}h / {r['Ore Nec']}h")
-                else: st.success(f"Copertura OK: {round(ore_check,1)}h")
                 final_list.append({"Hotel": r['Hotel'], "Team": ", ".join(edit_t)})
         
         if st.button("🧊 SALVA E SCARICA PDF"):
