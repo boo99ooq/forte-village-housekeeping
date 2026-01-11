@@ -10,14 +10,16 @@ FILE_DATA = 'housekeeping_database.csv'
 FILE_CONFIG = 'config_tempi.csv'
 FILE_HOTELS = 'hotel_list.csv'
 
-# --- CARICAMENTO DATI ---
+# --- FUNZIONI CARICAMENTO ---
 def load_data():
     if os.path.exists(FILE_DATA):
-        df = pd.read_csv(FILE_DATA)
-        for col in df.columns:
-            df[col] = df[col].fillna("").astype(str).str.strip()
-        return df
-    return pd.DataFrame(columns=["Nome", "Ruolo", "Professionalita", "Zone_Padronanza"])
+        try:
+            df = pd.read_csv(FILE_DATA)
+            for col in df.columns:
+                df[col] = df[col].fillna("").astype(str).str.strip()
+            return df
+        except: return pd.DataFrame()
+    return pd.DataFrame()
 
 def load_hotels():
     h_def = ["Hotel Castello", "Hotel Castello Garden", "Castello 4 Piano", "Le Dune", "Villa del Parco", "Bouganville", "Le Palme", "Il Borgo", "Le Ville"]
@@ -38,19 +40,21 @@ with st.sidebar:
     dati = {}
     nome_edit = None
     if modo == "Modifica Esistente" and not df.empty:
-        nome_edit = st.selectbox("Seleziona:", sorted(df['Nome'].tolist()))
+        nome_edit = st.selectbox("Seleziona persona:", sorted(df['Nome'].tolist()))
         dati = df[df['Nome'] == nome_edit].iloc[0].to_dict()
 
     with st.form("staff_form"):
         n_in = nome_edit if modo == "Modifica Esistente" else st.text_input("Nome")
-        is_gov = st.checkbox("Governante", value=(dati.get('Ruolo') == "Governante"))
+        is_gov = st.checkbox("Governante", value=(str(dati.get('Ruolo')).lower() == "governante"))
         prof = st.slider("Professionalità", 1, 10, int(dati.get('Professionalita', 5) if dati.get('Professionalita') else 5))
         z_at = str(dati.get('Zone_Padronanza', "")).split(", ")
         
         if is_gov:
+            st.info("Assegnazione Fissa")
             sel_z = st.multiselect("Hotel assegnati:", lista_hotel, default=[h for h in z_at if h in lista_hotel])
             z_ass = ", ".join(sel_z)
         else:
+            st.write("**Zone Padronanza**")
             sel_z = [h for h in lista_hotel if st.checkbox(h, key=f"s_{h}", value=(h in z_at))]
             z_ass = ", ".join(sel_z)
 
@@ -66,7 +70,14 @@ with st.sidebar:
 t1, t2, t3 = st.tabs(["🏆 Dashboard", "⚙️ Tempi", "🚀 Planning Resort"])
 
 with t1:
-    st.dataframe(df[['Nome', 'Ruolo', 'Zone_Padronanza', 'Professionalita']], use_container_width=True)
+    if not df.empty:
+        c1, c2 = st.columns(2)
+        n_gov = len(df[df['Ruolo'].str.lower() == "governante"])
+        n_cam = len(df[df['Ruolo'].str.lower() == "cameriera"])
+        c1.metric("Governanti totali", n_gov)
+        c2.metric("Cameriere totali", n_cam)
+        if n_gov == 0: st.error("⚠️ Attenzione: non hai nessuna Governante nel database! Cambia il ruolo a qualcuno dalla barra laterale.")
+        st.dataframe(df[['Nome', 'Ruolo', 'Zone_Padronanza', 'Professionalita']], use_container_width=True)
 
 with t2:
     st.header("Configurazione Minuti")
@@ -86,19 +97,14 @@ with t2:
                 up_c.append({"Hotel": r['Hotel'], "Arr_Ind": ai, "Fer_Ind": fi, "Arr_Gru": ag, "Fer_Gru": fg})
         if st.form_submit_button("SALVA TEMPI"):
             pd.DataFrame(up_c).to_csv(FILE_CONFIG, index=False)
-            st.success("Salvato!")
+            st.success("Tempi salvati correttamente!")
 
 with t3:
     st.header("🚀 Piano Operativo Globale")
-    
-    # --- BOX RIPOSI ---
     st.subheader("🏖️ Gestione Assenze")
-    tutti_nomi = sorted(df['Nome'].tolist())
-    personale_assente = st.multiselect("Seleziona chi è assente (Cameriere e Governanti):", tutti_nomi)
+    personale_assente = st.multiselect("Seleziona chi è assente oggi:", sorted(df['Nome'].tolist()))
     
     st.divider()
-    
-    # --- MATRICE CARICHI ---
     input_data = []
     h_col = st.columns([2, 1, 1, 1, 1, 1, 1])
     headers = ["HOTEL", "Arr.I", "Fer.I", "Vuo.I", "Arr.G", "Fer.G", "Vuo.G"]
@@ -119,8 +125,6 @@ with t3:
         if os.path.exists(FILE_CONFIG):
             conf_df = pd.read_csv(FILE_CONFIG)
             risultati = []
-            
-            # Personale attivo (non assente)
             df_attive = df[~df['Nome'].isin(personale_assente)].copy()
             già_assegnate = [] 
 
@@ -132,17 +136,16 @@ with t3:
 
             for row in input_data:
                 if row['ore'] > 0:
-                    # --- RICERCA GOVERNANTE ---
-                    # Cerchiamo tra le attive chi ha ruolo Governante e l'hotel tra le zone
-                    gov_match = df_attive[(df_attive['Ruolo'] == "Governante") & (df_attive['Zone_Padronanza'].str.contains(row['Hotel'], na=False))]
+                    # GOVERNANTE (Case insensitive e strip)
+                    gov_match = df_attive[(df_attive['Ruolo'].str.lower() == "governante") & (df_attive['Zone_Padronanza'].str.contains(row['Hotel'], na=False))]
                     nomi_gov = ", ".join(gov_match['Nome'].tolist()) if not gov_match.empty else "🚨 DA ASSEGNARE"
                     
-                    # --- SQUADRA CAMERIERE ---
+                    # CAMERIERE
                     num_nec = round(row['ore'] / 7) if row['ore'] >= 7 else 1
-                    cam = df_attive[(df_attive['Ruolo'] == "Cameriera") & (df_attive['Zone_Padronanza'].str.contains(row['Hotel'], na=False)) & (~df_attive['Nome'].isin(già_assegnate))]
+                    cam = df_attive[(df_attive['Ruolo'].str.lower() == "cameriera") & (df_attive['Zone_Padronanza'].str.contains(row['Hotel'], na=False)) & (~df_attive['Nome'].isin(già_assegnate))]
                     
                     if len(cam) < num_nec:
-                        jolly = df_attive[(df_attive['Ruolo'] == "Cameriera") & (~df_attive['Nome'].isin(già_assegnate)) & (~df_attive['Nome'].isin(cam['Nome']))].sort_values('Professionalita', ascending=False)
+                        jolly = df_attive[(df_attive['Ruolo'].str.lower() == "cameriera") & (~df_attive['Nome'].isin(già_assegnate)) & (~df_attive['Nome'].isin(cam['Nome']))].sort_values('Professionalita', ascending=False)
                         cam = pd.concat([cam, jolly]).head(num_nec)
                     else:
                         cam = cam.head(num_nec)
@@ -150,17 +153,11 @@ with t3:
                     nomi_con_icona = []
                     for _, c in cam.iterrows():
                         già_assegnate.append(c['Nome'])
-                        n_zone = len(str(c['Zone_Padronanza']).split(", "))
-                        icona = "📌" if n_zone == 1 else "🔄"
+                        icona = "📌" if len(str(c['Zone_Padronanza']).split(", ")) == 1 else "🔄"
                         nomi_con_icona.append(f"{icona} {c['Nome']}")
                     
-                    risultati.append({
-                        "Hotel": row['Hotel'], 
-                        "Ore": round(row['ore'], 1), 
-                        "Responsabile": nomi_gov, 
-                        "Squadra": ", ".join(nomi_con_icona)
-                    })
+                    risultati.append({"Hotel": row['Hotel'], "Ore": round(row['ore'], 1), "Responsabile": nomi_gov, "Squadra": ", ".join(nomi_con_icona)})
             
             if risultati:
                 st.write("### 📋 Proposta di Schieramento")
-                st.table(pd.DataFrame(risultati))
+                st.dataframe(pd.DataFrame(risultati), use_container_width=True) # Dataframe per leggibilità
