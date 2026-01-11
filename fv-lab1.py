@@ -115,36 +115,91 @@ with t1:
         st.dataframe(df_d[['Nome', 'Ruolo', 'Performance', 'Zone_Padronanza']], use_container_width=True, hide_index=True)
 
 with t3:
-    st.header("🚀 Planning")
-    data_p = st.date_input("Data:", datetime.now(), key="d_v8")
-    assenti = st.multiselect("🛌 Assenti:", nomi_db, key="a_v8")
+    st.header("🚀 Elaborazione Planning")
+    col_d, col_a = st.columns([1, 2])
+    data_p = col_d.date_input("Data Planning:", datetime.now(), key="date_p_final_v10")
+    assenti = col_a.multiselect("🛌 Assenti/Riposi:", nomi_db, key="ass_p_final_v10")
     
+    st.write("### 📊 Inserimento Carico Lavoro")
     cur_inp = {}
-    st.write("### 📊 Inserimento Camere")
+    h_col = st.columns([2, 1, 1, 1, 1])
+    h_col[0].write("**Hotel**"); h_col[1].write("AI"); h_col[2].write("FI"); h_col[3].write("COP"); h_col[4].write("BIA")
+    
     for h in lista_hotel:
-        r = st.columns([2, 1, 1, 1, 1])
-        r[0].write(f"**{h}**")
-        p_ai = r[1].number_input("AI", 0, 100, 0, key=f"ai_v8_{h}", label_visibility="collapsed")
-        p_fi = r[2].number_input("FI", 0, 100, 0, key=f"fi_v8_{h}", label_visibility="collapsed")
-        p_co = r[3].number_input("COP", 0, 100, 0, key=f"co_v8_{h}", label_visibility="collapsed")
-        p_bi = r[4].number_input("BIA", 0, 100, 0, key=f"bi_v8_{h}", label_visibility="collapsed")
+        row_c = st.columns([2, 1, 1, 1, 1])
+        row_c[0].write(f"**{h}**")
+        p_ai = row_c[1].number_input("", 0, 100, 0, key=f"v10_ai_{h}", label_visibility="collapsed")
+        p_fi = row_c[2].number_input("", 0, 100, 0, key=f"v10_fi_{h}", label_visibility="collapsed")
+        p_co = row_c[3].number_input("", 0, 100, 0, key=f"v10_co_{h}", label_visibility="collapsed")
+        p_bi = row_c[4].number_input("", 0, 100, 0, key=f"v10_bi_{h}", label_visibility="collapsed")
         cur_inp[h] = {"AI": p_ai, "FI": p_fi, "COP": p_co, "BIA": p_bi}
 
-    if st.button("🚀 GENERA SCHIERAMENTO"):
+    if st.button("🚀 GENERA SCHIERAMENTO", key="btn_v10_genera"):
+        conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
         attive = df[~df['Nome'].isin(assenti)].copy()
+        
+        # 1. Identificazione 4 Spezzati (Cameriere FT che hanno dato disponibilità)
         pool_spl = attive[attive['Ruolo'] == 'Cameriera'].head(4)['Nome'].tolist()
         
-        # Logica Fabbisogni & Zone
-        ris = []
-        # ... [Logica di calcolo precedentemente definita] ...
-        # [Nota: Qui il sistema calcola fabb[h] e assegna Gov + Cam]
+        # 2. Calcolo Fabbisogni Orari
+        fabb = {}
+        for h in lista_hotel:
+            t_row = conf_df[conf_df['Hotel'] == h] if not conf_df.empty else pd.DataFrame()
+            m_ai, m_fi = (t_row.iloc[0]['Arr_Ind'], t_row.iloc[0]['Fer_Ind']) if not t_row.empty else (60, 30)
+            # Calcolo ore: (AI*tempo + FI*tempo + Extra) / 60
+            fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["COP"]*(m_fi/3) + cur_inp[h]["BIA"]*(m_fi/4)) / 60
         
-        # Forza l'ordine nel session_state
-        st.session_state['res_v8'] = ris
-        st.session_state['spl_v8'] = pool_spl
+        # Macro Zona
+        fabb["MACRO: PALME & GARDEN"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
+        zone_ordine = ["Hotel Castello", "Hotel Castello 4 Piano", "MACRO: PALME & GARDEN"] + \
+                      [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
+        
+        gia_ass, ris = [], []
+        
+        for zona in zone_ordine:
+            o_nec = fabb.get(zona, 0)
+            team_h, o_fatti = [], 0
+            
+            # --- ASSEGNAZIONE GOVERNANTI (Sibilla, Lavinia, Febe, ecc.) ---
+            govs = attive[(attive['Ruolo'] == 'Governante') & (~attive['Nome'].isin(gia_ass))]
+            mask_g = govs['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)
+            for _, g in govs[mask_g].iterrows():
+                team_h.append(f"⭐ {g['Nome']} (Gov.)")
+                gia_ass.append(g['Nome'])
 
-    if 'res_v8' in st.session_state:
+            # --- ASSEGNAZIONE CAMERIERE ---
+            if o_nec > 0 or zona in ["Hotel Castello", "Hotel Castello 4 Piano"]:
+                cand = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_ass))].copy()
+                # Priorità a chi ha la zona in padronanza
+                cand['Prio'] = cand['Zone_Padronanza'].apply(lambda x: 0 if zona.replace("Hotel ", "").lower() in str(x).lower() else 1)
+                cand = cand.sort_values(['Prio'], ascending=True)
+                
+                for _, p in cand.iterrows():
+                    if o_fatti < (o_nec if o_nec > 0 else 7.5): # Garantisce almeno una persona se zona importante
+                        team_h.append(p['Nome'])
+                        gia_ass.append(p['Nome'])
+                        o_fatti += 5.0 if (p['Part_Time'] == 1 or p['Nome'] in pool_spl) else 7.5
+                    else:
+                        break
+            
+            if team_h:
+                ris.append({"Hotel": zona, "Team": ", ".join(team_h), "Ore": round(o_nec, 1)})
+        
+        st.session_state['v10_res'] = ris
+        st.session_state['v10_spl'] = pool_spl
+        st.session_state['v10_libere'] = list(set(attive[attive['Ruolo']=='Cameriera']['Nome']) - set(gia_ass))
+
+    # --- MOSTRA RISULTATI ---
+    if 'v10_res' in st.session_state:
         st.divider()
-        if st.button("🧊 SCARICA PDF PLANNING"):
-            pdf = genera_pdf(data_p.strftime("%d/%m/%Y"), st.session_state['res_v8'], st.session_state['spl_v8'], assenti)
-            st.download_button("📥 DOWNLOAD", pdf, f"Planning_{data_p}.pdf")
+        final_list = []
+        for i, r in enumerate(st.session_state['v10_res']):
+            with st.expander(f"📍 {r['Hotel']} (Fabbisogno: {r['Ore']}h)"):
+                current_team = [n.strip() for n in r['Team'].split(",")]
+                opzioni = sorted(list(set(current_team) | set(st.session_state['v10_libere'])))
+                edit_team = st.multiselect(f"Staff {r['Hotel']}", opzioni, default=current_team, key=f"edit_v10_{i}")
+                final_list.append({"Hotel": r['Hotel'], "Team": ", ".join(edit_team)})
+        
+        if st.button("🧊 CONFERMA E SCARICA PDF", key="btn_v10_pdf"):
+            pdf = genera_pdf(data_p.strftime("%d/%m/%Y"), final_list, st.session_state['v10_spl'], assenti)
+            st.download_button("📥 DOWNLOAD PDF", pdf, f"Planning_{data_p}.pdf", "application/pdf")
