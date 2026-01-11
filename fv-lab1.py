@@ -111,30 +111,41 @@ with t2:
         pd.DataFrame(new_c).to_csv(FILE_CONFIG, index=False); st.success("Salvati!")
 
 with t3:
-    st.header("🚀 Planning")
-    data_p = st.date_input("Giorno:", datetime.now(), key="d_v_fin")
-    assenti = st.multiselect("🛌 Assenti:", nomi_db, key="a_v_fin")
+    st.header("🚀 Planning Giornaliero")
     
-    # --- NUOVA INTESTAZIONE COLONNE ---
-    st.write("### Inserimento Carico Lavoro")
-    h_col = st.columns([2, 1, 1, 1, 1])
-    h_col[0].write("**Hotel**")
-    h_col[1].write("**AI** (Arr)")
-    h_col[2].write("**FI** (Fer)")
-    h_col[3].write("**COP**")
-    h_col[4].write("**BIA**")
+    # Riga per data e assenti
+    col_data, col_ass = st.columns([1, 2])
+    data_p = col_data.date_input("Giorno:", datetime.now(), key="d_v_fin")
+    assenti = col_ass.multiselect("🛌 Assenti:", nomi_db, key="a_v_fin")
+    
+    st.divider()
+    
+    # --- INTESTAZIONE COLONNE ---
+    st.write("### 📊 Inserimento Carico Lavoro")
+    # Ho allargato le colonne per far stare le scritte
+    h_col = st.columns([2.5, 1, 1, 1, 1])
+    h_col[0].markdown("**HOTEL**")
+    h_col[1].markdown("**AI** (Arr)")
+    h_col[2].markdown("**FI** (Fer)")
+    h_col[3].markdown("**COP** (Serali)")
+    h_col[4].markdown("**BIA** (Cambio)")
 
     cur_inp = {}
     for h in lista_hotel:
-        r = st.columns([2, 1, 1, 1, 1])
+        r = st.columns([2.5, 1, 1, 1, 1])
         r[0].write(f"**{h}**")
-        cur_inp[h] = {
-            "AI": r[1].number_input("AI", 0, 100, 0, key=f"v_ai_{h}", label_visibility="collapsed"),
-            "FI": r[2].number_input("FI", 0, 100, 0, key=f"v_fi_{h}", label_visibility="collapsed"),
-            "CO": r[3].number_input("COP", 0, 100, 0, key=f"v_co_{h}", label_visibility="collapsed"),
-            "BI": r[4].number_input("BIA", 0, 100, 0, key=f"v_bi_{h}", label_visibility="collapsed")
-        }
+        
+        # Inserimento dati numerici
+        v_ai = r[1].number_input("AI", 0, 100, 0, key=f"v_ai_{h}", label_visibility="collapsed")
+        v_fi = r[2].number_input("FI", 0, 100, 0, key=f"v_fi_{h}", label_visibility="collapsed")
+        v_co = r[3].number_input("COP", 0, 100, 0, key=f"v_co_{h}", label_visibility="collapsed")
+        v_bi = r[4].number_input("BIA", 0, 100, 0, key=f"v_bi_{h}", label_visibility="collapsed")
+        
+        cur_inp[h] = {"AI": v_ai, "FI": v_fi, "CO": v_co, "BI": v_bi}
 
+    st.write("") # Spazio extra
+    if st.button("🚀 GENERA SCHIERAMENTO", use_container_width=True):
+        # ... qui segue la logica di generazione ...
     if st.button("🚀 GENERA SCHIERAMENTO"):
         conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
         attive = df[~df['Nome'].isin(assenti)].copy()
