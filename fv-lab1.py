@@ -14,7 +14,7 @@ except ImportError:
 
 st.set_page_config(page_title="Forte Village Housekeeping", layout="wide")
 
-# --- DATABASE E CONFIG ---
+# --- DATABASE ---
 FILE_STAFF = 'housekeeping_database.csv' 
 FILE_CONFIG = 'config_tempi.csv'
 
@@ -29,29 +29,16 @@ def load_data():
         try:
             df = pd.read_csv(FILE_STAFF)
             df.columns = [c.strip() for c in df.columns]
-            if 'AutoPart_Time' in df.columns:
-                df = df.rename(columns={'AutoPart_Time': 'Auto'})
-            colonne_necessarie = {'Part_Time': 0, 'Auto': 'Nessuna', 'Conteggio_Spezzati': 0, 'Zone_Padronanza': ''}
-            for col, default in colonne_necessarie.items():
-                if col not in df.columns:
-                    df[col] = default
+            colonne = {'Part_Time': 0, 'Auto': 'Nessuna', 'Zone_Padronanza': ''}
+            for col, d in colonne.items():
+                if col not in df.columns: df[col] = d
             df['Part_Time'] = pd.to_numeric(df['Part_Time'], errors='coerce').fillna(0)
             return df.fillna("")
-        except:
-            return pd.DataFrame()
+        except: return pd.DataFrame()
     return pd.DataFrame()
 
 def save_data(df):
     df.to_csv(FILE_STAFF, index=False)
-
-def get_rating_bar(row):
-    try:
-        if 'overnante' in str(row.get('Ruolo', '')).lower(): return "⭐ (Coord.)", 10.0
-        p = pd.to_numeric(row.get('Professionalita', 5))
-        e = pd.to_numeric(row.get('Esperienza', 5))
-        voto = round(((p + e) / 4) * 2) / 2
-        return "🟩" * int(voto) + "⬜" * (5 - int(voto)), voto
-    except: return "⬜" * 5, 0.0
 
 def genera_pdf(data_str, schieramento, split_list, lista_assenti):
     buffer = BytesIO()
@@ -149,96 +136,78 @@ with t3:
             if not conf_df.empty and 'Hotel' in conf_df.columns:
                 t_r = conf_df[conf_df['Hotel'] == h]
                 if not t_r.empty:
-                    m_ai = t_r.iloc[0].get('Arr_Ind', 60)
-                    m_fi = t_r.iloc[0].get('Fer_Ind', 30)
+                    m_ai = t_r.iloc[0].get('Arr_Ind', 60); m_fi = t_r.iloc[0].get('Fer_Ind', 30)
             fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["CO"]*(m_fi/3) + cur_inp[h]["BI"]*(m_fi/4)) / 60
         
         fabb["MACRO: PALME & GARDEN"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
         z_ordine = ["Hotel Castello", "Hotel Castello 4 Piano", "MACRO: PALME & GARDEN"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
         
-        gia_a, ris = [], []
+        gia_a = set()
+        ris = []
         for zona in z_ordine:
             o_n, t_h, o_f = fabb.get(zona, 0), [], 0
+            # 1. Filtro disponibili REALE
+            disponibili = attive[~attive['Nome'].isin(gia_a)]
+            
             # Gov
-            gov = attive[(attive['Ruolo'] == 'Governante') & (~attive['Nome'].isin(gia_a))]
+            gov = disponibili[disponibili['Ruolo'] == 'Governante']
             mask_g = gov['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)
             for _, g in gov[mask_g].iterrows():
-                t_h.append(f"⭐ {g['Nome']} (Gov.)"); gia_a.append(g['Nome'])
+                t_h.append(f"⭐ {g['Nome']} (Gov.)"); gia_a.add(g['Nome'])
+            
             # Cam
+            disponibili = attive[~attive['Nome'].isin(gia_a)]
             if o_n > 0 or zona in ["Hotel Castello", "Hotel Castello 4 Piano"]:
-                cand = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
+                cand = disponibili[disponibili['Ruolo'] == 'Cameriera'].copy()
                 cand['Pr'] = cand['Zone_Padronanza'].apply(lambda x: 0 if zona.replace("Hotel ", "").lower() in str(x).lower() else 1)
                 cand = cand.sort_values(['Pr'], ascending=True)
                 for _, p in cand.iterrows():
                     if o_f < (o_n if o_n > 0 else 7.5):
-                        t_h.append(p['Nome']); gia_a.append(p['Nome'])
-                        is_pt = p.get('Part_Time', 0)
-                        o_f += 5.0 if (is_pt == 1 or p['Nome'] in pool_spl) else 7.5
+                        t_h.append(p['Nome']); gia_a.add(p['Nome'])
+                        o_f += 5.0 if (p.get('Part_Time', 0) == 1 or p['Nome'] in pool_spl) else 7.5
                     else: break
             if t_h: ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Ore": round(o_n, 1)})
         st.session_state['res_v_fin'] = ris
         st.session_state['spl_v_fin'] = pool_spl
-        st.session_state['lib_v_fin'] = list(set(attive[attive['Ruolo']=='Cameriera']['Nome']) - set(gia_a))
 
-    # --- VISUALIZZAZIONE RISULTATI E RIEPILOGO ---
+    # --- LOGICA UNICITÀ MANUALE ---
     if 'res_v_fin' in st.session_state:
         st.divider()
+        tutte_attive = set(n for n in nomi_db if n not in assenti)
         
-        # 1. Recuperiamo lo stato attuale delle squadre dagli input (se già toccati)
-        # Usiamo un dizionario temporaneo per capire chi è assegnato DOVE
-        squadre_attuali = {}
-        tutti_assegnati_ora = []
+        # Recupero selezioni correnti dai widget per calcolare le libere
+        tutti_scelti_manualmente = set()
+        for i in range(len(st.session_state['res_v_fin'])):
+            val = st.session_state.get(f"edt_f_{i}", [])
+            tutti_scelti_manualmente.update([n.replace("⭐ ", "").replace(" (Gov.)", "").strip() for n in val])
         
-        for i, r in enumerate(st.session_state['res_v_fin']):
-            key_ms = f"edt_f_{i}"
-            # Se l'utente ha già interagito con il multiselect, prendiamo quel valore
-            if key_ms in st.session_state:
-                nomi_scelti = st.session_state[key_ms]
-            else:
-                nomi_scelti = [n.strip() for n in r['Team'].split(",") if n.strip()]
-            
-            squadre_attuali[r['Hotel']] = nomi_scelti
-            tutti_assegnati_ora.extend(nomi_scelti)
-        
-        # 2. Calcoliamo chi è veramente libero in questo istante
-        tutte_attive = [n for n in nomi_db if n not in assenti]
-        vere_libere = sorted(list(set(tutte_attive) - set(tutti_assegnati_ora)))
-        
-        # 3. Riepilogo Risorse
-        st.subheader("📋 Riepilogo Risorse")
+        vere_libere = sorted(list(tutte_attive - tutti_scelti_manualmente))
+
+        st.subheader("📋 Riepilogo Risorse (Persone Uniche)")
         c1, c2, c3 = st.columns(3)
-        c1.metric("Totale Attive", len(tutte_attive))
-        c2.metric("Assegnate", len(tutti_assegnati_ora))
-        c3.metric("In Panchina", len(vere_libere))
+        c1.metric("Totale Forza Lavoro", len(tutte_attive))
+        c2.metric("Impegnate", len(tutti_scelti_manualmente))
+        c3.metric("Disponibili (Panchina)", len(vere_libere))
 
-        with st.expander("🏃 PANCHINA (Personale disponibile)", expanded=True):
-            if vere_libere:
-                st.write(", ".join(vere_libere))
-            else:
-                st.write("*Tutte le cameriere sono occupate*")
+        with st.expander("🏃 PANCHINA", expanded=True):
+            st.write(", ".join(vere_libere) if vere_libere else "Tutte assegnate.")
 
-        # 4. Regolazione Squadre
         st.subheader("📍 Regolazione Squadre")
         final_list = []
-        
         for i, r in enumerate(st.session_state['res_v_fin']):
             with st.expander(f"📍 {r['Hotel']}"):
-                nomi_in_questo_hotel = squadre_attuali[r['Hotel']]
+                # Nomi attualmente in questo hotel
+                key = f"edt_f_{i}"
+                if key in st.session_state:
+                    attuali_qui = st.session_state[key]
+                else:
+                    attuali_qui = [n.strip() for n in r['Team'].split(",") if n.strip()]
                 
-                # Le opzioni devono essere: chi è già qui + chi è in panchina
-                opzioni_dinamiche = sorted(list(set(nomi_in_questo_hotel) | set(vere_libere)))
-                
-                # Visualizziamo il multiselect
-                scelta = st.multiselect(
-                    f"Staff {r['Hotel']}", 
-                    options=opzioni_dinamiche, 
-                    default=nomi_in_questo_hotel, 
-                    key=f"edt_f_{i}"
-                )
+                # Opzioni = Nomi qui + Nomi non assegnati da nessuna parte
+                opts = sorted(list(set(attuali_qui) | set(vere_libere)))
+                scelta = st.multiselect(f"Team {r['Hotel']}", opts, default=attuali_qui, key=key)
                 final_list.append({"Hotel": r['Hotel'], "Team": ", ".join(scelta)})
         
-        # 5. Bottone finale per il PDF che usa la 'final_list' aggiornata
-        st.divider()
-        if st.button("🧊 CONFERMA E SCARICA PDF FINALE"):
+        if st.button("🧊 SCARICA PDF"):
             pdf = genera_pdf(data_p.strftime("%d/%m/%Y"), final_list, st.session_state['spl_v_fin'], assenti)
-            st.download_button("📥 CLICCA QUI PER IL DOWNLOAD", pdf, f"Planning_{data_p}.pdf")
+            st.download_button("📥 DOWNLOAD", pdf, f"Planning_{data_p}.pdf")
