@@ -29,7 +29,7 @@ def load_data():
         try:
             df = pd.read_csv(FILE_STAFF)
             df.columns = [c.strip() for c in df.columns]
-            colonne = {'Part_Time': 0, 'Auto': 'Nessuna', 'Zone_Padronanza': ''}
+            colonne = {'Part_Time': 0, 'Auto': 'Nessuna', 'Zone_Padronanza': '', 'Lavora_Bene_Con': ''}
             for col, d in colonne.items():
                 if col not in df.columns: df[col] = d
             df['Part_Time'] = pd.to_numeric(df['Part_Time'], errors='coerce').fillna(0)
@@ -82,8 +82,9 @@ with st.sidebar:
         z_attuali = [z.strip() for z in str(curr['Zone_Padronanza']).split(",")] if curr is not None else []
         f_zn = st.multiselect("Zone Padronanza", lista_hotel, default=[z for z in z_attuali if z in lista_hotel])
         f_pt = st.checkbox("🕒 Part-Time", value=bool(curr.get('Part_Time', 0)) if curr is not None else False)
+        f_lbc = st.selectbox("Lavora Bene Con", ["Nessuna"] + nomi_db, index=nomi_db.index(curr['Lavora_Bene_Con'])+1 if curr is not None and curr['Lavora_Bene_Con'] in nomi_db else 0)
         if st.form_submit_button("💾 SALVA"):
-            nuova = {"Nome": f_n, "Ruolo": f_r, "Zone_Padronanza": ", ".join(f_zn), "Part_Time": 1 if f_pt else 0}
+            nuova = {"Nome": f_n, "Ruolo": f_r, "Zone_Padronanza": ", ".join(f_zn), "Part_Time": 1 if f_pt else 0, "Lavora_Bene_Con": f_lbc}
             df = df[df['Nome'] != sel_nome] if curr is not None else df
             df = pd.concat([df, pd.DataFrame([nuova])], ignore_index=True)
             save_data(df); st.rerun()
@@ -102,8 +103,7 @@ with t2:
         if not c_df.empty and 'Hotel' in c_df.columns:
             t_row = c_df[c_df['Hotel'] == h]
             if not t_row.empty:
-                m_ai = int(t_row.iloc[0].get('Arr_Ind', 60))
-                m_fi = int(t_row.iloc[0].get('Fer_Ind', 30))
+                m_ai = int(t_row.iloc[0].get('Arr_Ind', 60)); m_fi = int(t_row.iloc[0].get('Fer_Ind', 30))
         ai = cols[1].number_input("AI", 5, 120, m_ai, key=f"t_ai_{h}")
         fi = cols[2].number_input("FI", 5, 120, m_fi, key=f"t_fi_{h}")
         new_c.append({"Hotel": h, "Arr_Ind": ai, "Fer_Ind": fi})
@@ -147,66 +147,66 @@ with t3:
         for zona in z_ordine:
             o_n, t_h, o_f = fabb.get(zona, 0), [], 0
             
-            # Gov
+            # 1. GOVERNANTI
             gov = attive[(attive['Ruolo'] == 'Governante') & (~attive['Nome'].isin(gia_a))]
             mask_g = gov['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)
             for _, g in gov[mask_g].iterrows():
                 t_h.append(f"⭐ {g['Nome']} (Gov.)"); gia_a.add(g['Nome'])
             
-            # Cam
+            # 2. CAMERIERE (CON LOGICA AFFINITÀ)
             if o_n > 0 or zona in ["Hotel Castello", "Hotel Castello 4 Piano"]:
                 cand = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
                 cand['Pr'] = cand['Zone_Padronanza'].apply(lambda x: 0 if zona.replace("Hotel ", "").lower() in str(x).lower() else 1)
                 cand = cand.sort_values(['Pr'], ascending=True)
+                
                 for _, p in cand.iterrows():
+                    if p['Nome'] in gia_a: continue
                     if o_f < (o_n if o_n > 0 else 7.5):
                         t_h.append(p['Nome']); gia_a.add(p['Nome'])
                         o_f += 5.0 if (p.get('Part_Time', 0) == 1 or p['Nome'] in pool_spl) else 7.5
+                        
+                        # --- TIRA DENTRO COMPAGNA ---
+                        c_pref = str(p.get('Lavora_Bene_Con', '')).strip()
+                        if c_pref and c_pref in attive['Nome'].values and c_pref not in gia_a:
+                            t_h.append(c_pref); gia_a.add(c_pref)
+                            p_c = attive[attive['Nome'] == c_pref].iloc[0]
+                            o_f += 5.0 if (p_c.get('Part_Time', 0) == 1 or c_pref in pool_spl) else 7.5
                     else: break
             
-            # --- LOGICA NUMERO PARI (COPPIE) ---
+            # 3. PAREGGIAMENTO (PER COPPIE)
             if len(t_h) > 0 and len(t_h) % 2 != 0:
-                restanti = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
-                if not restanti.empty:
-                    restanti['Pr'] = restanti['Zone_Padronanza'].apply(lambda x: 0 if zona.replace("Hotel ", "").lower() in str(x).lower() else 1)
-                    rinforzo = restanti.sort_values(['Pr'], ascending=True).iloc[0]
-                    t_h.append(rinforzo['Nome'])
-                    gia_a.add(rinforzo['Nome'])
+                rest = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
+                if not rest.empty:
+                    rest['Pr'] = rest['Zone_Padronanza'].apply(lambda x: 0 if zona.replace("Hotel ", "").lower() in str(x).lower() else 1)
+                    rinf = rest.sort_values(['Pr'], ascending=True).iloc[0]
+                    t_h.append(rinf['Nome']); gia_a.add(rinf['Nome'])
 
             if t_h: ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Ore": round(o_n, 1)})
-        st.session_state['res_v_fin'] = ris
-        st.session_state['spl_v_fin'] = pool_spl
+        st.session_state['res_v_fin'] = ris; st.session_state['spl_v_fin'] = pool_spl
 
+    # --- RIEPILOGO E MODIFICA ---
     if 'res_v_fin' in st.session_state:
         st.divider()
         tutte_attive = set(n for n in nomi_db if n not in assenti)
-        tutti_scelti_manualmente = set()
+        tutti_scelti = set()
         for i in range(len(st.session_state['res_v_fin'])):
             val = st.session_state.get(f"edt_f_{i}", [])
-            tutti_scelti_manualmente.update([n.replace("⭐ ", "").replace(" (Gov.)", "").strip() for n in val])
-        
-        vere_libere = sorted(list(tutte_attive - tutti_scelti_manualmente))
+            tutti_scelti.update([n.replace("⭐ ", "").replace(" (Gov.)", "").strip() for n in val])
+        vere_libere = sorted(list(tutte_attive - tutti_scelti))
 
-        st.subheader("📋 Riepilogo Risorse (Persone Uniche)")
+        st.subheader("📋 Riepilogo")
         c1, c2, c3 = st.columns(3)
-        c1.metric("Totale Forza Lavoro", len(tutte_attive))
-        c2.metric("Impegnate", len(tutti_scelti_manualmente))
-        c3.metric("Disponibili (Panchina)", len(vere_libere))
+        c1.metric("Attive", len(tutte_attive)); c2.metric("Impegnate", len(tutti_scelti)); c3.metric("Libere", len(vere_libere))
+        with st.expander("🏃 PANCHINA", expanded=True): st.write(", ".join(vere_libere) if vere_libere else "Tutte assegnate.")
 
-        with st.expander("🏃 PANCHINA", expanded=True):
-            st.write(", ".join(vere_libere) if vere_libere else "Tutte assegnate.")
-
-        st.subheader("📍 Regolazione Squadre")
         final_list = []
         for i, r in enumerate(st.session_state['res_v_fin']):
             with st.expander(f"📍 {r['Hotel']}"):
                 key = f"edt_f_{i}"
-                attuali_qui = st.session_state.get(key, [n.strip() for n in r['Team'].split(",") if n.strip()])
-                opts = sorted(list(set(attuali_qui) | set(vere_libere)))
-                # Feedback visivo se dispari
-                if len(attuali_qui) % 2 != 0:
-                    st.warning(f"⚠️ Questa squadra ha {len(attuali_qui)} persone (Numero Dispari).")
-                scelta = st.multiselect(f"Team {r['Hotel']}", opts, default=attuali_qui, key=key)
+                attuali = st.session_state.get(key, [n.strip() for n in r['Team'].split(",") if n.strip()])
+                opts = sorted(list(set(attuali) | set(vere_libere)))
+                if len(attuali) % 2 != 0: st.warning("⚠️ Squadra dispari.")
+                scelta = st.multiselect(f"Team {r['Hotel']}", opts, default=attuali, key=key)
                 final_list.append({"Hotel": r['Hotel'], "Team": ", ".join(scelta)})
         
         if st.button("🧊 SCARICA PDF"):
