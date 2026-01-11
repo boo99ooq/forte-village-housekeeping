@@ -284,13 +284,11 @@ with t_plan:
         pool_spl = attive[attive['Ruolo'] == 'Cameriera'].head(4)['Nome'].tolist()
         st.session_state['spl_v_fin'] = pool_spl
         
+       conf_df.columns = conf_df.columns.str.strip().str.upper()
         fabb = {}
         for h in lista_hotel:
-            # Ora cerchiamo 'HOTEL' in maiuscolo
             m = conf_df[conf_df['HOTEL'] == h]
-            
             if not m.empty:
-                # Usiamo i nomi in maiuscolo come impostato sopra
                 m_ai = m.iloc[0]['ARR I']
                 m_fi = m.iloc[0]['FERM I']
                 m_ag = m.iloc[0]['ARR G']
@@ -299,9 +297,13 @@ with t_plan:
                 m_ai, m_fi, m_ag, m_fg = 60, 30, 45, 25
             
             tot_fer = cur_inp[h]["FI"] + cur_inp[h]["FG"]
-            # Calcolo fabbisogno
             fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["AG"]*m_ag + cur_inp[h]["FG"]*m_fg + tot_fer*15) / 60
         
+        fabb["MACRO: PALME & GARDEN"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
+        z_ord = ["Hotel Castello", "Hotel Castello 4 Piano", "MACRO: PALME & GARDEN"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
+        
+        gia_a, ris = set(), []
+        for zona in z_ord:        
         # Logica di assegnazione
         fabb["MACRO: PALME & GARDEN"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
         z_ord = ["Hotel Castello", "Hotel Castello 4 Piano", "MACRO: PALME & GARDEN"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
