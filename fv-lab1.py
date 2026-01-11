@@ -253,9 +253,9 @@ with t_tempi:
             if not conf_df.empty:
                 conf_df.columns = [str(c).strip().upper() for c in conf_df.columns]
             
-            attive = df[~df['Nome'].isin(assenti)].copy()
-            # Identifichiamo subito i 4 nomi per lo spezzato
-            pool_spl = attive[attive['Ruolo'] == 'Cameriera'].head(4)['Nome'].tolist()
+            # Creiamo attive qui dentro per il calcolo
+            attive_calc = df[~df['Nome'].isin(assenti)].copy()
+            pool_spl = attive_calc[attive_calc['Ruolo'] == 'Cameriera'].head(4)['Nome'].tolist()
             st.session_state['spl_v_fin'] = pool_spl
             
             fabb = {}
@@ -270,31 +270,27 @@ with t_tempi:
                 t_bian = (m_fi / 4) * cur_inp[h]["BIAN"]
                 fabb[h] = (cur_inp[h]["AI"]*m_ai + cur_inp[h]["FI"]*m_fi + cur_inp[h]["AG"]*m_ag + cur_inp[h]["FG"]*m_fg + t_cop + t_bian) / 60
     
-            # Zona aggregata senza prefisso MACRO
             fabb["Palme & Garden"] = fabb.get("Le Palme", 0) + fabb.get("Hotel Castello Garden", 0)
             z_ord = ["Hotel Castello", "Hotel Castello 4 Piano", "Palme & Garden"] + [h for h in lista_hotel if h not in ["Hotel Castello", "Hotel Castello 4 Piano", "Le Palme", "Hotel Castello Garden"]]
             
             gia_a = set()
             for zona in z_ord:
                 o_n, t_h, o_f = fabb.get(zona, 0), [], 0
-                
                 # 1. GOVERNANTI ⭐
-                gv_z = attive[(attive['Ruolo'] == 'Governante') & (~attive['Nome'].isin(gia_a))]
+                gv_z = attive_calc[(attive_calc['Ruolo'] == 'Governante') & (~attive_calc['Nome'].isin(gia_a))]
                 mask_g = gv_z['Zone_Padronanza'].str.contains(zona.replace("Hotel ", ""), case=False, na=False)
                 for _, g in gv_z[mask_g].iterrows():
                     t_h.append(f"⭐ {g['Nome']} (Gov.)")
                     gia_a.add(g['Nome'])
                 
-                # 2. CAMERIERE con icone 🌙 e 🕒
+                # 2. CAMERIERE (Icone)
                 if o_n > 0 or zona in ["Hotel Castello", "Hotel Castello 4 Piano"]:
-                    cand = attive[(attive['Ruolo'] == 'Cameriera') & (~attive['Nome'].isin(gia_a))].copy()
+                    cand = attive_calc[(attive_calc['Ruolo'] == 'Cameriera') & (~attive_calc['Nome'].isin(gia_a))].copy()
                     for _, p in cand.iterrows():
                         if p['Nome'] in gia_a: continue
                         if o_f < (o_n if o_n > 0 else 7.5):
-                            # Controllo icone molto robusto
                             is_spl = p['Nome'] in pool_spl
                             is_pt = str(p.get('Part_Time', '0')) == '1'
-                            
                             ico = "🌙 " if is_spl else ("🕒 " if is_pt else "")
                             t_h.append(f"{ico}{p['Nome']}")
                             gia_a.add(p['Nome'])
@@ -304,28 +300,27 @@ with t_tempi:
                 if t_h:
                     n_gov = len([n for n in t_h if "⭐" in n])
                     n_cam = len(t_h) - n_gov
-                    n_coppie = n_cam / 2  # Calcolo coppie (anche .5)
-                    
+                    n_coppie = n_cam / 2
                     n_spl = len([n for n in t_h if "🌙" in n])
                     n_pt = len([n for n in t_h if "🕒" in n])
                     n_std = n_cam - n_spl - n_pt
-                    
                     info = f"G:{n_gov} | Cam:{n_cam} (Coppie:{n_coppie}) | Std:{n_std} PT:{n_pt} 🌙:{n_spl}"
                     ris.append({"Hotel": zona, "Team": ", ".join(t_h), "Req": round(o_n, 1), "Info": info})
             
             st.session_state['res_v_fin'] = ris
             st.rerun()
     
+        # --- VISUALIZZAZIONE RISULTATI ---
         if 'res_v_fin' in st.session_state:
             st.divider()
-            # Cameriere rimaste con icone
-            tutte_c = attive[attive['Ruolo'] == 'Cameriera'].copy()
+            # Ricalcoliamo 'attive' qui fuori per i riquadri
+            attive_display = df[(df['Ruolo'] == 'Cameriera') & (~df['Nome'].isin(assenti))].copy()
             assegnate_nomi = set()
             for r in st.session_state['res_v_fin']:
                 nomi_puliti = [n.replace("🌙 ", "").replace("🕒 ", "").strip() for n in r['Team'].split(", ") if "Gov." not in n]
                 assegnate_nomi.update(nomi_puliti)
             
-            rimaste_df = tutte_c[~tutte_c['Nome'].isin(assegnate_nomi)]
+            rimaste_df = attive_display[~attive_display['Nome'].isin(assegnate_nomi)]
             rimaste_ico = []
             for _, p in rimaste_df.iterrows():
                 ico = "🌙 " if p['Nome'] in st.session_state.get('spl_v_fin',[]) else ("🕒 " if str(p.get('Part_Time','0'))=='1' else "")
@@ -343,9 +338,6 @@ with t_tempi:
             final_l = []
             for i, r in enumerate(st.session_state['res_v_fin']):
                 with st.expander(f"📍 {r['Hotel']} | {r['Info']} | {r['Req']}h"):
-                    # Mostriamo il team con le icone per chiarezza
-                    st.write(f"✨ **Team Proposto:** {r['Team']}")
-                    
                     def_p = [n.replace("⭐ ", "").replace(" (Gov.)", "").replace("🌙 ", "").replace("🕒 ", "").strip() for n in r['Team'].split(", ")]
                     s = st.multiselect(f"Modifica {r['Hotel']}", nomi_db, default=def_p, key=f"e_{i}")
                     final_l.append({"Hotel": r['Hotel'], "Team": ", ".join(s)})
