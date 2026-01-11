@@ -130,7 +130,7 @@ with t3:
         attive = df[~df['Nome'].isin(assenti)].copy()
         pool_spl = attive[attive['Ruolo'] == 'Cameriera'].head(4)['Nome'].tolist()
         
-       # --- VISUALIZZAZIONE RISULTATI E RIEPILOGO ---
+      # --- VISUALIZZAZIONE RISULTATI E RIEPILOGO ---
     if 'res_v_fin' in st.session_state:
         st.divider()
         tutte_attive = set(n for n in nomi_db if n not in assenti)
@@ -138,18 +138,18 @@ with t3:
         final_list = []
         tutti_scelti = set()
         
-        # Primo passaggio: raccogliamo tutti i nomi attualmente scelti nei multiselect
+        # 1. Raccogliamo i nomi scelti per calcolare chi è libero
         for i in range(len(st.session_state['res_v_fin'])):
             val = st.session_state.get(f"edt_f_{i}", [])
             tutti_scelti.update([n.replace("⭐ ", "").replace(" (Gov.)", "").strip() for n in val])
         
-        # Secondo passaggio: costruiamo gli expander con il bilancio ore
+        # 2. Mostriamo gli hotel e calcoliamo il bilancio ore
         for i, r in enumerate(st.session_state['res_v_fin']):
             key = f"edt_f_{i}"
-            # Recuperiamo i nomi (se l'utente ha modificato, usa i nuovi, altrimenti i generati)
-            attuali = st.session_state.get(key, [n.strip() for n in r['Team'].split(",") if n.strip()])
+            # Usiamo .get per evitare il crash se l'hotel non ha ancora i dati completi
+            attuali = st.session_state.get(key, [n.strip() for n in r.get('Team', '').split(",") if n.strip()])
             
-            # Calcolo ore coperte (Cameriere: FT=7.5, PT/Spl=5.0)
+            # Calcolo ore coperte
             ore_coperte = 0
             for nome in attuali:
                 n_pulito = nome.replace("⭐ ", "").replace(" (Gov.)", "").strip()
@@ -161,16 +161,11 @@ with t3:
                         is_spl = n_pulito in st.session_state.get('spl_v_fin', [])
                         ore_coperte += 5.0 if (is_pt or is_spl) else 7.5
             
-            # Recupero sicuro del fabbisogno (Req) per evitare il KeyError
-            fabbisogno = r.get('Req', 0)
+            # PROTEZIONE KEYERROR: usiamo .get('Req', 0)
+            fabbisogno = r.get('Req', 0) 
             diff = round(ore_coperte - fabbisogno, 1)
             
-            if diff >= 0:
-                bilancio_str = f"✅ OK (+{diff}h)"
-                colore_header = "green"
-            else:
-                bilancio_str = f"⚠️ SOTTO ({diff}h)"
-                colore_header = "red"
+            bilancio_str = f"✅ OK (+{diff}h)" if diff >= 0 else f"⚠️ SOTTO ({diff}h)"
             
             with st.expander(f"📍 {r['Hotel']} | Servono: {fabbisogno}h | Coperti: {ore_coperte}h | {bilancio_str}"):
                 vere_libere = sorted(list(tutte_attive - tutti_scelti))
@@ -180,58 +175,19 @@ with t3:
                     st.warning(f"👫 Squadra dispari ({len(attuali)} persone).")
                 
                 scelta = st.multiselect(f"Modifica Team {r['Hotel']}", opts, default=attuali, key=key)
-                final_list.append({"Hotel": r['Hotel'], "Team": ", ".join(scelta), "Bilancio": bilancio_str})
+                # Salviamo i dati aggiornati per il PDF
+                final_list.append({
+                    "Hotel": r['Hotel'], 
+                    "Team": ", ".join(scelta), 
+                    "Bilancio": bilancio_str,
+                    "Req": fabbisogno
+                })
 
-        # Riepilogo Panchina
+        # 3. Riepilogo Panchina
         vere_libere_finali = sorted(list(tutte_attive - tutti_scelti))
         if vere_libere_finali:
             st.info(f"🏃 IN PANCHINA: {', '.join(vere_libere_finali)}")
-        else:
-            st.success("✅ Tutte le risorse sono state impiegate.")
 
         if st.button("🧊 CONFERMA E SCARICA PDF"):
             pdf = genera_pdf(data_p.strftime("%d/%m/%Y"), final_list, st.session_state.get('spl_v_fin', []), assenti)
-            st.download_button("📥 DOWNLOAD", pdf, f"Planning_{data_p}.pdf")
-    if 'res_v_fin' in st.session_state:
-        st.divider()
-        tutte_attive = set(n for n in nomi_db if n not in assenti)
-        
-        # LOGICA CALCOLO BILANCIO DINAMICO
-        final_list = []
-        tutti_scelti = set()
-        
-        for i, r in enumerate(st.session_state['res_v_fin']):
-            key = f"edt_f_{i}"
-            attuali = st.session_state.get(key, [n.strip() for n in r['Team'].split(",") if n.strip()])
-            
-            # Calcolo ore coperte per questo hotel
-            ore_coperte = 0
-            for nome in attuali:
-                n_pulito = nome.replace("⭐ ", "").replace(" (Gov.)", "").strip()
-                if n_pulito in df['Nome'].values:
-                    p_data = df[df['Nome'] == n_pulito].iloc[0]
-                    # Governanti = 0 ore lavoro fisico (o 7.5 se vuoi contarle), qui contiamo solo cameriere
-                    if p_data['Ruolo'] == 'Cameriera':
-                        ore_coperte += 5.0 if (p_data.get('Part_Time', 0) == 1 or n_pulito in st.session_state['spl_v_fin']) else 7.5
-            
-            diff = round(ore_coperte - r['Req'], 1)
-            bilancio_str = f"✅ OK (+{diff}h)" if diff >= 0 else f"⚠️ SOTTO ({diff}h)"
-            
-            tutti_scelti.update([n.replace("⭐ ", "").replace(" (Gov.)", "").strip() for n in attuali])
-            
-            with st.expander(f"📍 {r['Hotel']} | Servono: {r['Req']}h | Coperti: {ore_coperte}h | {bilancio_str}"):
-                vere_libere = sorted(list(tutte_attive - tutti_scelti))
-                opts = sorted(list(set(attuali) | set(vere_libere)))
-                if len(attuali) % 2 != 0: st.warning("⚠️ Numero dispari.")
-                scelta = st.multiselect(f"Team {r['Hotel']}", opts, default=attuali, key=key)
-                final_list.append({"Hotel": r['Hotel'], "Team": ", ".join(scelta), "Bilancio": bilancio_str})
-
-        # Riepilogo finale
-        vere_libere_finali = sorted(list(tutte_attive - tutti_scelti))
-        st.sidebar.metric("Libere in Panchina", len(vere_libere_finali))
-        if vere_libere_finali:
-            st.info(f"🏃 IN PANCHINA: {', '.join(vere_libere_finali)}")
-
-        if st.button("🧊 SCARICA PDF"):
-            pdf = genera_pdf(data_p.strftime("%d/%m/%Y"), final_list, st.session_state['spl_v_fin'], assenti)
             st.download_button("📥 DOWNLOAD", pdf, f"Planning_{data_p}.pdf")
