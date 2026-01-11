@@ -149,63 +149,65 @@ with t3:
 
     if st.button("🚀 GENERA SCHIERAMENTO"):
         conf_df = pd.read_csv(FILE_CONFIG) if os.path.exists(FILE_CONFIG) else pd.DataFrame()
-        # Prendiamo TUTTE le cameriere disponibili (es. 65 meno i riposi)
         attive = df[(~df['Nome'].isin(assenti)) & (df['Ruolo'] == 'Cameriera')].copy()
-        
-        # 1. Identificazione Split (le 4 che devono fare il serale)
         pool_split = attive[(attive['Part_Time'] == 0) & (attive['Indisp_Spezzato'] == 0)].sort_values('Conteggio_Spezzati').head(4)['Nome'].tolist()
         
-        # Inizializziamo chi è già occupato
         gia_assegnate = []
-        # Nota: chi fa lo split lavora comunque 5h la mattina, le teniamo nel pool delle assegnabili
-        
         ris = []
 
+        # --- 1. PRE-CALCOLO ORE PER TUTTI GLI HOTEL ---
+        fabbisogno_per_hotel = {}
         for inp in cur_inp:
-            # Recupero tempi standard
             t = conf_df[conf_df['Hotel'] == inp['Hotel']].iloc[0] if not conf_df.empty else {"Arr_Ind":60, "Fer_Ind":30}
-            
-            # CALCOLO ORE TOTALI NECESSARIE PER L'HOTEL
             ore_nec = (inp['AI']*t['Arr_Ind'] + inp['FI']*t['Fer_Ind'] + inp['COP']*(t['Fer_Ind']/3) + inp['BIA']*(t['Fer_Ind']/4)) / 60
+            fabbisogno_per_hotel[inp['Hotel']] = ore_nec
+
+        # --- 2. LOGICA DI UNIONE (PALME + GARDEN) ---
+        fabbisogno_per_hotel["UNICO: PALME & GARDEN"] = fabbisogno_per_hotel.get("Le Palme", 0) + fabbisogno_per_hotel.get("Hotel Castello Garden", 0)
+        
+        # Lista degli hotel da processare (escludiamo quelli singoli già uniti)
+        lista_processo = [h for h in lista_hotel if h not in ["Le Palme", "Hotel Castello Garden"]]
+        lista_processo.append("UNICO: PALME & GARDEN")
+
+        # --- 3. ASSEGNAZIONE EFFETTIVA ---
+        for nome_zona in lista_processo:
+            ore_nec = fabbisogno_per_hotel.get(nome_zona, 0)
             
             if ore_nec > 0:
                 team_hotel = []
                 ore_fornite_attuali = 0
                 
-                # Cerchiamo tra chi NON è ancora stato assegnato ad altri hotel
-                # Diamo priorità 1 a chi ha la padronanza di QUELL'hotel, priorità 2 agli altri
                 candidate = attive[~attive['Nome'].isin(gia_assegnate)].copy()
-                candidate['Priorita'] = candidate['Zone_Padronanza'].apply(lambda x: 0 if x == inp['Hotel'] else 1)
+                
+                # Priorità: se è la zona unita, cerca chi ha padronanza in uno dei due hotel
+                if nome_zona == "UNICO: PALME & GARDEN":
+                    candidate['Priorita'] = candidate['Zone_Padronanza'].apply(
+                        lambda x: 0 if x in ["Le Palme", "Hotel Castello Garden"] else 1
+                    )
+                else:
+                    candidate['Priorita'] = candidate['Zone_Padronanza'].apply(
+                        lambda x: 0 if x == nome_zona else 1
+                    )
+                
                 candidate = candidate.sort_values(['Priorita', 'Rating_Num'], ascending=[True, False])
                 
-                # AGGIUNGIAMO PERSONE (COPPIE) FINCHÉ LE ORE NON SONO COPERTE
                 for _, cam in candidate.iterrows():
                     if ore_fornite_attuali < ore_nec:
                         team_hotel.append(cam['Nome'])
                         gia_assegnate.append(cam['Nome'])
-                        
-                        # Contributo orario individuale
-                        # Se è Part-Time o se è stata scelta per lo Split, lavora 5h. Altrimenti 7.5h.
-                        if cam['Part_Time'] == 1 or cam['Nome'] in pool_split:
-                            ore_fornite_attuali += 5.0
-                        else:
-                            ore_fornite_attuali += 7.5
+                        ore_fornite_attuali += 5.0 if (cam['Part_Time'] == 1 or cam['Nome'] in pool_split) else 7.5
                     else:
-                        # Ore coperte, passiamo al prossimo hotel
                         break
                 
                 ris.append({
-                    "Hotel": inp['Hotel'], 
+                    "Hotel": nome_zona, 
                     "Team": ", ".join(team_hotel), 
-                    "Ore Servono": round(ore_nec, 1),
-                    "Ore Fornite": round(ore_fornite_attuali, 1)
+                    "Ore Servono": round(ore_nec, 1)
                 })
         
         st.session_state['res'] = ris
         st.session_state['spl'] = pool_split
-        # Salviamo anche chi è avanzato (le "libere" che non sono state assegnate a nessun hotel)
         st.session_state['rimaste_libere'] = list(set(attive['Nome'].tolist()) - set(gia_assegnate))
-
     # Visualizzazione risultati con controllo manuale
     if 'res' in st.session_state:
         st.write(f"### 📋 Schieramento Proposto ({len(lista_nomi) - len(assenti)} persone in turno)")
